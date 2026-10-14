@@ -81,6 +81,7 @@ h2.sec{font:800 15px var(--display);margin:4px 0 0;color:var(--muted);letter-spa
 .live .level{position:absolute;left:50%;top:50%;width:46%;height:2px;background:rgba(255,255,255,.8);transform:translate(-50%,-50%);transform-origin:center;pointer-events:none}
 .live .level.ok{background:var(--ok)}
 .live .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.live .big .msg.head{border-left-color:var(--accent);font-size:15px;background:rgba(40,28,12,.82)}
 </style>
 
 <div class="wrap">
@@ -115,6 +116,7 @@ h2.sec{font:800 15px var(--display);margin:4px 0 0;color:var(--muted);letter-spa
     <button class="btn" id="liveGhost" type="button" hidden>겹침 끄기</button>
     <label class="btn grow">📷 갤럭시 카메라로 찍기<input type="file" id="liveNative" accept="image/*" capture="environment"></label>
   </div>
+  <p class="hint" id="liveDebug">분석 상태가 여기에 표시됩니다.</p>
   <p class="status" id="liveStatus">카메라 켜기를 누르면 권한 창이 뜹니다. 허용하면 화면을 보면서 "뒤로·옆으로·노출" 안내가 실시간으로 뜹니다.</p>
   <p class="hint">안내는 밝기·기울기·얼굴 위치·크기를 0.3초마다 계산해서 냅니다. 앱 안 촬영 버튼은 간편용이고, 최고 화질은 같은 구도로 '갤럭시 카메라로 찍기'를 쓰세요(찍은 사진은 '사진 판정' 탭으로 자동 이동).</p>
 </section>
@@ -309,7 +311,7 @@ function shadowHue(d, L, N){ // 그림자(루마<0.2)의 평균 색: 청록이�
 async function detectFaces(canvas){
   if (!("FaceDetector" in window)) return null;
   try { const fd = new window.FaceDetector({ maxDetectedFaces: 5, fastMode: true });
-    const faces = await fd.detect(canvas);
+    const faces = await Promise.race([fd.detect(canvas), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 400))]);
     return faces.map(f => ({ x: f.boundingBox.x/canvas.width, y: f.boundingBox.y/canvas.height, w: f.boundingBox.width/canvas.width, h: f.boundingBox.height/canvas.height }));
   } catch (e) { return null; }
 }
@@ -323,8 +325,163 @@ const CATS = {
   "야경": ["노출 −0.7~−1.0. 밝게 찍으면 네온이 하얗게 날아감.", "야간모드는 정지 장면만(사람·차 움직이면 뭉개짐).", "영상은 30fps 유지, 프로 영상이면 셔터 1/50.", "광원을 정면으로 보지 말고 비스듬히.", "젖은 바닥·유리 반사를 앞에 넣으면 영화 느낌."],
   "제품·소품": ["배경 단순하게(흰 종이·나무 책상 하나).", "빛은 옆에서(측광), 그림자 방향 한 가지.", "탑뷰 또는 45도. 소품은 홀수로 배치.", "2x 줌으로 떨어져 찍으면 형태가 정확해짐."],
   "실내": ["창을 등지지 말기(사람이 실루엣 됨).", "형광등+백열등 섞이면 색이 탁해짐 → 하나만 켜기.", "벽·문틀 수직선 똑바로.", "넓어 보이게는 0.5x 광각, 단 구석에서 대각선으로."],
+  "동물": ["눈높이로 내려가서 찍기(서서 내려다보면 평범해짐).", "눈에 초점. 눈을 터치해 초점 고정.", "움직이면 연속 촬영(길게 누르기)이나 영상 캡처.", "배경을 단순하게, 거리를 두고 2x 줌."],
   "일반": ["3분할 격자 켜고 주인공을 교차점에.", "배경 정리 → 한 걸음 가까이 → 노출 터치. 이 세 가지면 절반은 해결.", "같은 장면을 세로·가로 둘 다 찍어두기."]
 };
+/* ───────── 인식 엔진 (Human: 얼굴 + 물체 80종, 기기 안에서 실행, 토큰 0) ───────── */
+const AI = { human: null, state: "idle", err: "", p: null, fail: 0 };
+function loadScript(src){ return new Promise((res, rej) => { const el = document.createElement("script"); el.src = src; el.onload = res; el.onerror = () => rej(new Error("파일을 불러오지 못했어요: " + src)); document.head.appendChild(el); }); }
+function initAI(){
+  if (AI.p) return AI.p;
+  AI.state = "loading";
+  AI.p = (async () => {
+    try {
+      await loadScript("lib/human.js");
+      const H = (window.Human && (window.Human.Human || window.Human.default)) || window.Human;
+      const h = new H({ modelBasePath: "models/", debug: false, warmup: "none", filter: { enabled: false },
+        face: { enabled: true, detector: { modelPath: "blazeface.json", maxDetected: 4, minConfidence: 0.3, rotation: false }, mesh: { enabled: false }, iris: { enabled: false }, description: { enabled: false }, emotion: { enabled: false }, antispoof: { enabled: false }, liveness: { enabled: false } },
+        body: { enabled: false }, hand: { enabled: false }, gesture: { enabled: false }, segmentation: { enabled: false },
+        object: { enabled: true, modelPath: "centernet.json", minConfidence: 0.25, maxDetected: 8 } });
+      await h.load();
+      AI.human = h; AI.state = "ready"; return true;
+    } catch (e) { AI.state = "failed"; AI.err = String(e && e.message || e); return false; }
+  })();
+  return AI.p;
+}
+async function aiDetect(canvas){
+  if (AI.state !== "ready") return null;
+  try {
+    const r = await AI.human.detect(canvas);
+    const faces = (r.face || []).filter(f => f.boxRaw).map(f => ({ x: Math.max(0, f.boxRaw[0]), y: Math.max(0, f.boxRaw[1]), w: Math.min(1, f.boxRaw[2]), h: Math.min(1, f.boxRaw[3]), score: f.score || f.boxScore || 0 }));
+    const objects = (r.object || []).filter(o => o.boxRaw).map(o => { const x0 = Math.max(0, o.boxRaw[0]), y0 = Math.max(0, o.boxRaw[1]), x1 = Math.min(1, o.boxRaw[0] + o.boxRaw[2]), y1 = Math.min(1, o.boxRaw[1] + o.boxRaw[3]); return { label: o.label, score: o.score, x: x0, y: y0, w: x1 - x0, h: y1 - y0 }; });
+    AI.fail = 0; return { faces, objects };
+  } catch (e) { AI.fail++; if (AI.fail >= 3) { AI.state = "failed"; AI.err = String(e && e.message || e); } return null; }
+}
+const FOODSET = { banana: "바나나", apple: "사과", sandwich: "샌드위치", orange: "오렌지", broccoli: "브로콜리", carrot: "당근", "hot dog": "핫도그", pizza: "피자", donut: "도넛", cake: "케이크", bowl: "그릇", cup: "컵", "wine glass": "와인잔", fork: "포크", knife: "칼", spoon: "숟가락", "dining table": "식탁" };
+const ANIMALS = { bird: "새", cat: "고양이", dog: "강아지", horse: "말", sheep: "양", cow: "소", elephant: "코끼리", bear: "곰", zebra: "얼룩말", giraffe: "기린" };
+const STREET = { bicycle: "자전거", car: "자동차", motorcycle: "오토바이", airplane: "비행기", bus: "버스", train: "기차", truck: "트럭", boat: "배", "traffic light": "신호등", "fire hydrant": "소화전", "stop sign": "표지판", "parking meter": "주차미터기", bench: "벤치" };
+const THINGS = { bottle: "병", vase: "화병", book: "책", clock: "시계", laptop: "노트북", "cell phone": "휴대폰", keyboard: "키보드", mouse: "마우스", remote: "리모컨", tv: "TV", "potted plant": "화분", "teddy bear": "곰인형", chair: "의자", couch: "소파", bed: "침대", backpack: "배낭", handbag: "핸드백", umbrella: "우산", tie: "넥타이", suitcase: "가방", "sports ball": "공", kite: "연", scissors: "가위", toothbrush: "칫솔", "hair drier": "드라이기", toaster: "토스터", sink: "싱크대", refrigerator: "냉장고", oven: "오븐", microwave: "전자레인지", toilet: "변기", skateboard: "스케이트보드", frisbee: "원반", "tennis racket": "라켓", surfboard: "서프보드" };
+function kindOf(label){
+  if (FOODSET[label]) return { kind: "음식", cat: "음식", ko: FOODSET[label] };
+  if (ANIMALS[label]) return { kind: "동물", cat: "동물", ko: ANIMALS[label] };
+  if (STREET[label]) return { kind: "거리", cat: "거리·건물", ko: STREET[label] };
+  return { kind: "사물", cat: "제품·소품", ko: THINGS[label] || label };
+}
+function unionBox(list){ const x0 = Math.max(0, Math.min(...list.map(o => o.x))), y0 = Math.max(0, Math.min(...list.map(o => o.y))), x1 = Math.min(1, Math.max(...list.map(o => o.x + o.w))), y1 = Math.min(1, Math.max(...list.map(o => o.y + o.h))); return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }; }
+function pickSubject(det){
+  if (!det) return null;
+  const objs = det.objects, P = objs.filter(o => o.label === "person" && o.score >= 0.4 && o.w * o.h > 0.01);
+  const F = det.faces.filter(f => f.score >= 0.5 && f.w > 0.03).sort((a, b) => b.w * b.h - a.w * a.h);
+  const others = objs.filter(o => o.label !== "person").map(o => ({ x: o.x, y: o.y, w: o.w, h: o.h }));
+  // 동물 얼굴을 사람 얼굴로 착각하는 경우: 얼굴 중심이 동물 상자 안이고 사람 상자가 없으면 동물로 본다
+  if (!P.length && F.length) { const f = F[0], fx = f.x + f.w/2, fy = f.y + f.h/2;
+    const an = objs.find(o => ANIMALS[o.label] && o.score >= 0.3 && fx >= o.x && fx <= o.x + o.w && fy >= o.y && fy <= o.y + o.h);
+    if (an) return { kind: "동물", cat: "동물", ko: ANIMALS[an.label], n: 1, box: { x: an.x, y: an.y, w: an.w, h: an.h }, others }; }
+  if (P.length || F.length) {
+    const box = P.length ? unionBox(P) : { x: F[0].x, y: F[0].y, w: F[0].w, h: F[0].h };
+    const inBox = F.filter(f => { const cx = f.x + f.w/2, cy = f.y + f.h/2; return cx >= box.x - 0.02 && cx <= box.x + box.w + 0.02 && cy >= box.y - 0.02 && cy <= box.y + box.h + 0.02; });
+    const face = inBox[0] || (P.length ? null : F[0]);
+    const n = P.length || 1;
+    return { kind: "사람", cat: "인물", ko: n > 1 ? `사람 ${n}명` : "사람", n, box, face, faceOnly: !P.length, others };
+  }
+  const O = objs.filter(o => o.score >= 0.3);
+  const foods = O.filter(o => FOODSET[o.label] && o.label !== "dining table");
+  if (foods.length) return { kind: "음식", cat: "음식", ko: foods.length > 1 ? `음식·그릇 ${foods.length}개` : FOODSET[foods[0].label], n: foods.length, box: unionBox(foods), others };
+  const rest = O.filter(o => o.label !== "dining table");
+  if (rest.length) { let best = null, bs = -1;
+    rest.forEach(o => { const cx = o.x + o.w/2, cy = o.y + o.h/2, dist = Math.hypot(cx - 0.5, cy - 0.5), sc = Math.sqrt(o.w * o.h) * o.score * (1 - 0.6 * dist); if (sc > bs) { bs = sc; best = o; } });
+    const k = kindOf(best.label); return { kind: k.kind, cat: k.cat, ko: k.ko, n: 1, box: { x: best.x, y: best.y, w: best.w, h: best.h }, others }; }
+  const tb = O.find(o => o.label === "dining table");
+  if (tb) return { kind: "음식", cat: "음식", ko: "식탁 위 장면", n: 1, box: { x: tb.x, y: tb.y, w: tb.w, h: tb.h }, others };
+  return null;
+}
+function bgInfo(canvas, box){ // 주인공 바깥(배경)의 복잡도와 주인공-배경 밝기 차이
+  const W = 120, H = Math.max(1, Math.round(canvas.height * W / canvas.width));
+  const c = document.createElement("canvas"); c.width = W; c.height = H; const x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(canvas, 0, 0, W, H);
+  const d = x.getImageData(0, 0, W, H).data, L = new Float32Array(W * H);
+  for (let i = 0, p = 0; i < W * H; i++, p += 4) L[i] = (0.2126*d[p] + 0.7152*d[p+1] + 0.0722*d[p+2]) / 255;
+  const pad = 0.04, bx0 = box.x - pad, bx1 = box.x + box.w + pad, by0 = box.y - pad, by1 = box.y + box.h + pad;
+  let strong = 0, sIn = 0, nIn = 0, sOut = 0, nOut = 0;
+  for (let y = 1; y < H - 1; y++) for (let xx = 1; xx < W - 1; xx++) {
+    const nx = xx / W, ny = y / H, i = y * W + xx;
+    if (nx >= bx0 && nx <= bx1 && ny >= by0 && ny <= by1) { sIn += L[i]; nIn++; continue; }
+    sOut += L[i]; nOut++; if (Math.hypot(L[i+1] - L[i-1], L[i+W] - L[i-W]) > 0.12) strong++;
+  }
+  if (nOut < W * H * 0.12 || !nIn) return { busy: 0, contrast: 1, known: false };
+  return { busy: strong / nOut, contrast: Math.abs(sIn / nIn - sOut / nOut), known: true };
+}
+const camH = d => d > 0 ? "왼쪽으로" : "오른쪽으로", camV = d => d < 0 ? "아래로" : "위로";
+function adviseSubject(s, a, bg, tilt, includeScene){
+  const acts = []; const add = (t, sev, p) => acts.push({ t, s: sev, p });
+  const b = s.box, cx = b.x + b.w/2, cy = b.y + b.h/2; let tx = cx, ty = cy, k = 1, shot = "";
+  if (s.kind === "사람") {
+    const f = s.face, fh = f ? f.h : null, ph = s.faceOnly ? null : b.h;
+    shot = fh != null ? (fh > 0.22 ? "클로즈업" : fh > 0.11 ? "상반신" : "전신") : (ph > 0.9 ? "상반신" : "전신");
+    const tooFar = (ph != null && ph < 0.35) || (fh != null && fh < 0.05), tooClose = fh != null && fh > 0.32, feetCut = !s.faceOnly && shot === "전신" && b.y + b.h > 0.985;
+    if (tooFar) { add("멀어요 — 두 걸음 앞으로 (또는 줌 2x)", "warn", 1); k = Math.min(2.2, ph != null ? 0.6 / ph : 0.14 / fh); }
+    else if (tooClose) { add("너무 가까워요 — 한 걸음 뒤로 (얼굴 왜곡이 줄어요)", "warn", 1); k = 0.24 / fh; }
+    else if (feetCut) { add("발끝이 잘려요 — 한 걸음 뒤로 (전신이 다 나오게)", "bad", 1); k = 0.85 / b.h; }
+    if (!tooClose) { if (b.x < 0.01) add("사람 왼쪽이 잘려요 — 카메라를 왼쪽으로", "bad", 1); else if (b.x + b.w > 0.99) add("사람 오른쪽이 잘려요 — 카메라를 오른쪽으로", "bad", 1); }
+    tx = s.n >= 2 ? 0.5 : (cx < 0.5 ? 0.34 : 0.66);
+    const dx = tx - cx;
+    if (s.n >= 2) { if (Math.abs(dx) > 0.10) add(`무리가 한쪽으로 쏠렸어요 — 카메라를 ${camH(dx)} 조금`, "warn", 3); }
+    else if (Math.abs(cx - 0.5) < 0.1) add(`정가운데예요 — ${dx < 0 ? "왼쪽" : "오른쪽"} 1/3선으로: 카메라를 ${camH(dx)} 조금 (배경이 보여 사진이 살아요)`, "warn", 3);
+    else if (Math.abs(dx) > 0.07) add(`가장자리에 치우쳤어요 — 카메라를 ${camH(dx)} 조금 (1/3선으로)`, "warn", 3);
+    if (fh != null && fh >= 0.08) {
+      const fcy = f.y + f.h/2, dy = 0.34 - fcy;
+      if (f.y < 0.03) add("머리 위 여백이 없어요 — 카메라를 위로", "bad", 1);
+      else if (Math.abs(dy) > 0.09) add(`얼굴이 ${dy < 0 ? "아래" : "위"}쪽에 있어요 — 카메라를 ${camV(dy)} 조금 (얼굴이 위 1/3선에 오게)`, "warn", 2);
+      ty = cy + dy;
+    } else {
+      const dy = 0.5 - cy;
+      if (b.y < 0.03) add("머리가 잘려요 — 카메라를 위로", "bad", 1);
+      else if (Math.abs(dy) > 0.12) add(`카메라를 ${camV(dy)} 조금 (사람이 세로 가운데에)`, "warn", 2);
+      ty = cy + dy;
+    }
+  } else {
+    const ms = Math.max(b.w, b.h), center = s.kind === "음식" || s.kind === "사물";
+    if (ms < 0.30) { add("주인공이 작아요 — 한 걸음(또는 줌 2x) 가까이", "warn", 1); k = Math.min(2.2, 0.55 / ms); }
+    else if (ms > 0.92) { add("꽉 차서 잘려요 — 한 걸음 뒤로", "warn", 1); k = 0.8 / ms; }
+    tx = center ? 0.5 : (cx < 0.5 ? 0.34 : 0.66); ty = center ? 0.5 : 0.48;
+    const dx = tx - cx, dy = ty - cy;
+    if (Math.abs(dx) > 0.10) add(`주인공을 ${center ? "가운데로" : "1/3선으로"} — 카메라를 ${camH(dx)} 조금`, "warn", 2);
+    if (Math.abs(dy) > 0.14) add(`카메라를 ${camV(dy)} 조금 (주인공이 ${dy < 0 ? "아래" : "위"}쪽에 있어요)`, "warn", 2);
+  }
+  if (bg && bg.known) {
+    if (bg.busy > 0.30) add("배경이 복잡해요 — 한 걸음 옆으로 가서 벽·하늘처럼 단순한 배경 앞에서", "warn", 4);
+    else if (bg.contrast < 0.07) add("주인공이 배경에 묻혀요 — 배경이 더 어둡거나 밝은 쪽으로 각도를 바꾸세요", "warn", 4);
+  }
+  if (includeScene) {
+    if (a.bright > 0.08 || a.meanL > 0.72) add("너무 밝음 — 화면 터치 후 해 아이콘을 아래로 (−0.7)", "warn", 5);
+    else if (a.meanL < 0.18 && !(s.kind === "거리")) add("어두움 — 밝은 쪽을 터치하거나 조명 쪽으로", "warn", 5);
+    if (s.kind !== "음식" && s.kind !== "사물" && Math.abs(tilt) >= 1.5) add(`${tilt > 0 ? "왼쪽" : "오른쪽"}으로 ${Math.abs(tilt).toFixed(0)}° 돌려 수평`, Math.abs(tilt) >= 3 ? "bad" : "warn", 5);
+    if (a.cast > 0.15) add("노란 조명 — 찍고 편집에서 '차갑게'", "warn", 6);
+  }
+  acts.sort((p, q) => p.p - q.p);
+  const tw = b.w * k, th = b.h * k, target = { x: tx - tw/2, y: ty - th/2, w: tw, h: th };
+  const needMove = Math.hypot(tx - cx, ty - cy) > 0.07 || Math.abs(k - 1) > 0.15;
+  const bgLabel = bg && bg.known ? (bg.busy > 0.30 ? "배경 복잡" : "배경 깔끔") : "";
+  return { headline: `주인공: ${s.ko}${shot ? " · " + shot : ""}${bgLabel ? " · " + bgLabel : ""}`, actions: acts, target, needMove, subject: { box: b, label: s.ko }, others: s.others, cat: s.cat, kind: s.kind };
+}
+function adviseNoSubject(a, tilt, cat){
+  const m = liveAdvice(a, null, cat, tilt).filter(x => !/지금 찍으세요|잠깐 멈추세요/.test(x.t));
+  return { headline: "주인공을 못 찾았어요 — 배경·풍경 장면으로 봅니다", actions: [{ t: "찍고 싶은 것 하나를 정해 화면 1/3선에 두고 가까이 가세요", s: "warn" }, ...m], subject: null, cat: null };
+}
+function drawGuides(ctx, W, H, adv, M){
+  if (!adv || !adv.subject) return;
+  const u = Math.max(1, W / 480), R = bx => ({ x: M.ox + bx.x * W * M.sx, y: M.oy + bx.y * H * M.sy, w: bx.w * W * M.sx, h: bx.h * H * M.sy });
+  const sb = R(adv.subject.box);
+  (adv.others || []).forEach(o => { const r = R(o); ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = u; ctx.setLineDash([]); ctx.strokeRect(r.x, r.y, r.w, r.h); });
+  if (adv.target && adv.needMove) {
+    const t = R(adv.target); ctx.setLineDash([10 * u, 7 * u]); ctx.strokeStyle = "#6fcf8f"; ctx.lineWidth = 3 * u; ctx.strokeRect(t.x, t.y, t.w, t.h); ctx.setLineDash([]);
+    const x0 = sb.x + sb.w/2, y0 = sb.y + sb.h/2, x1 = t.x + t.w/2, y1 = t.y + t.h/2, ang = Math.atan2(y1 - y0, x1 - x0), len = Math.hypot(x1 - x0, y1 - y0);
+    if (len > 14 * u) { ctx.strokeStyle = "#6fcf8f"; ctx.fillStyle = "#6fcf8f"; ctx.lineWidth = 3 * u; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1 - 14*u*Math.cos(ang - 0.45), y1 - 14*u*Math.sin(ang - 0.45)); ctx.lineTo(x1 - 14*u*Math.cos(ang + 0.45), y1 - 14*u*Math.sin(ang + 0.45)); ctx.closePath(); ctx.fill(); }
+  }
+  ctx.setLineDash([]); ctx.strokeStyle = "#f2a33a"; ctx.lineWidth = 3 * u; ctx.strokeRect(sb.x, sb.y, sb.w, sb.h);
+  ctx.font = `600 ${Math.round(14 * u)}px sans-serif`; const tw = ctx.measureText(adv.subject.label).width + 12 * u, ly = Math.max(0, sb.y - 22 * u);
+  ctx.fillStyle = "rgba(242,163,58,.95)"; ctx.fillRect(sb.x, ly, tw, 22 * u); ctx.fillStyle = "#1a1206"; ctx.textBaseline = "middle"; ctx.fillText(adv.subject.label, sb.x + 6 * u, ly + 11 * u); ctx.textBaseline = "alphabetic";
+}
 function guessCategory(a, faces){
   if (faces && faces.length) return "인물";
   if (a.sky && a.meanL > 0.45) return "풍경";
@@ -338,7 +495,7 @@ const side = ["왼쪽", "가운데", "오른쪽"], vside = ["위", "가운데", 
 
 function verdicts(a, faces, cat, ref){
   const out = [], steps = [];
-  const add = (title, status, msg, step) => { out.push({ title, status, msg }); if (step) steps.push(step); };
+  const add = (title, status, msg, step) => { out.push({ title, status, msg }); if (step) steps.push({ title, step }); };
   // 노출
   if (a.meanL < 0.22 || a.dark > 0.45) add("노출", "bad", `어둡게 찍혔어요 (평균 밝기 ${Math.round(a.meanL*100)}%). ${cat==="야경"||cat==="거리·건물" ? "밤 장면은 이 정도가 정상일 수 있어요. 조명이 보이면 OK." : "밝은 쪽을 터치해 노출 고정 후 해 아이콘으로 +0.3, 또는 창가·조명 쪽으로 이동."}`, cat==="야경"||cat==="거리·건물" ? null : "밝은 곳으로 옮기거나 노출 +0.3");
   else if (a.meanL > 0.72 || a.bright > 0.08) add("노출", "warn", `밝은 부분이 날아갔어요 (하이라이트 ${Math.round(a.bright*100)}%). 노출 −0.7로 낮추면 색이 살아요.`, "노출 −0.7 (화면 터치 후 해 아이콘 아래로)");
@@ -385,7 +542,7 @@ function verdicts(a, faces, cat, ref){
     if (ref.tilt && Math.abs(ref.tilt) < 1.5 && Math.abs(a.tilt) >= 1.5) msgs.push("레퍼런스는 수평이 정확함");
     add("레퍼런스와 비교", msgs.length ? "warn" : "ok", msgs.length ? msgs.join(". ") + "." : "밝기·채도·색 분위기가 레퍼런스와 비슷해요. 편집 탭에서 '레퍼런스 색 맞추기'로 마무리.");
   }
-  return { cards: out, steps: steps.slice(0, 4) };
+  return { cards: out, steps };
 }
 
 /* ───────── 코치 탭 UI ───────── */
@@ -401,22 +558,40 @@ function drawCoach(){
   ctx.strokeStyle = "rgba(255,255,255,.45)"; ctx.setLineDash([]);
   [1/3, 2/3].forEach(t => { ctx.beginPath(); ctx.moveTo(W*t, 0); ctx.lineTo(W*t, H); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0, H*t); ctx.lineTo(W, H*t); ctx.stroke(); });
   const a = coach.analysis; if (!a) return;
-  if (coach.faces && coach.faces.length) { ctx.strokeStyle = "#f2a33a"; ctx.lineWidth = Math.max(2, W/250);
+  if (coach.adv && coach.adv.subject) drawGuides(ctx, W, H, coach.adv, { ox: 0, oy: 0, sx: 1, sy: 1 });
+  else if (coach.faces && coach.faces.length) { ctx.strokeStyle = "#f2a33a"; ctx.lineWidth = Math.max(2, W/250);
     coach.faces.forEach(f => ctx.strokeRect(f.x*W, f.y*H, f.w*W, f.h*H)); }
   else { ctx.fillStyle = "rgba(242,163,58,.9)"; ctx.beginPath(); ctx.arc(a.subject.x*W, a.subject.y*H, Math.max(6, W/60), 0, Math.PI*2); ctx.fill(); }
   if (Math.abs(a.tilt) >= 1.5) { ctx.strokeStyle = "#ef7a66"; ctx.lineWidth = Math.max(2, W/300); ctx.beginPath();
     const r = a.tilt*Math.PI/180, len = W*0.45; ctx.moveTo(W/2 - Math.cos(r)*len, H/2 - Math.sin(r)*len); ctx.lineTo(W/2 + Math.cos(r)*len, H/2 + Math.sin(r)*len); ctx.stroke(); }
   if (a.horizon != null) { ctx.strokeStyle = "rgba(111,207,143,.9)"; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.moveTo(0, a.horizon*H); ctx.lineTo(W, a.horizon*H); ctx.stroke(); ctx.setLineDash([]); }
 }
-async function runCoach(){
+async function runCoach(opts){
   if (!coach.canvas) return;
+  const useAI = !(opts && opts.ai === false) && AI.state !== "failed";
   coach.analysis = analyze(coach.canvas);
-  coach.faces = await detectFaces(coach.canvas);
-  if (!coach.catLocked) coach.cat = guessCategory(coach.analysis, coach.faces);
+  let det = null;
+  if (useAI) {
+    if (AI.state !== "ready") { $("coachSteps").innerHTML = "<li>인식 모델 불러오는 중… (처음 한 번, 약 6MB)</li>"; await initAI(); }
+    if (AI.state === "ready") { $("coachSteps").innerHTML = "<li>분석 중…</li>"; det = await aiDetect(toCanvas(coach.canvas, 480)); }
+  }
+  coach.faces = det ? det.faces.filter(f => f.score >= 0.5) : await detectFaces(coach.canvas);
+  const subj = det ? pickSubject(det) : null;
+  const bg = subj ? bgInfo(coach.canvas, subj.box) : null;
+  coach.adv = subj ? adviseSubject(subj, coach.analysis, bg, coach.analysis.tilt, false) : null;
+  if (!coach.catLocked) coach.cat = coach.adv ? coach.adv.cat : guessCategory(coach.analysis, coach.faces);
   renderChips($("catChips"), Object.keys(CATS), coach.cat, name => { coach.cat = name; coach.catLocked = true; runCoach(); });
   const v = verdicts(coach.analysis, coach.faces, coach.cat, coach.ref);
-  $("coachCards").innerHTML = v.cards.map(c => `<div class="card"><h3><span class="pill ${c.status}"></span>${c.title}</h3><p>${c.msg}</p></div>`).join("");
-  $("coachSteps").innerHTML = (v.steps.length ? v.steps : ["이대로 좋아요. 같은 자리에서 세로·가로 한 장씩 더."]).map(s => `<li>${s}</li>`).join("");
+  const POS = ["거리", "여백", "위치", "주인공 위치", "수평선"];
+  let cards = v.cards, steps = v.steps.map(x => x.step);
+  if (coach.adv) {
+    const worst = coach.adv.actions.some(x => x.s === "bad") ? "bad" : coach.adv.actions.length ? "warn" : "ok";
+    cards = [{ title: "주인공 · 구도", status: worst, msg: coach.adv.headline + (coach.adv.actions.length ? " — " + coach.adv.actions.map(x => x.t).join(" / ") : " — 구도 좋아요.") }, ...v.cards.filter(c => !POS.includes(c.title))];
+    steps = [...coach.adv.actions.map(x => x.t), ...v.steps.filter(x => !POS.includes(x.title)).map(x => x.step)];
+  }
+  $("coachSummary").querySelector("h2").textContent = coach.adv ? "다시 찍을 때 — " + coach.adv.headline : "다시 찍을 때";
+  $("coachCards").innerHTML = cards.map(c => `<div class="card"><h3><span class="pill ${c.status}"></span>${c.title}</h3><p>${c.msg}</p></div>`).join("");
+  $("coachSteps").innerHTML = (steps.length ? steps : ["이대로 좋아요. 같은 자리에서 세로·가로 한 장씩 더."]).slice(0, 5).map(t => `<li>${t}</li>`).join("");
   $("catTipList").innerHTML = CATS[coach.cat].map(t => `<li>${t}</li>`).join("");
   $("catTips").querySelector("summary").textContent = `'${coach.cat}' 기본 촬영법`;
   drawCoach();
@@ -643,7 +818,8 @@ async function startLive(){
     if (caps.zoom) { const z = $("liveZoom"); z.min = caps.zoom.min; z.max = Math.min(caps.zoom.max, 5); z.step = caps.zoom.step || 0.1; z.value = live.track.getSettings().zoom || caps.zoom.min; $("liveZoomV").textContent = (+z.value).toFixed(1) + "x"; $("liveZoomWrap").hidden = false; }
   } catch (e) {}
   if (window.DeviceOrientationEvent) window.addEventListener("deviceorientation", onOrient);
-  live.timer = setInterval(liveTick, 300);
+  initAI(); $("liveMsgs").innerHTML = '<div class="msg">분석 중… (인식 모델은 처음 한 번 불러오는 데 몇 초 걸립니다)</div>';
+  live.timer = setInterval(liveTick, 300); setTimeout(liveTick, 50);
 }
 function stopLive(){
   clearInterval(live.timer); live.timer = null;
@@ -659,32 +835,47 @@ function onOrient(e){ // 세로로 들었을 때 좌우 기울기 = gamma, 카�
   live.tiltDev = g; $("liveLevel").style.transform = `translate(-50%,-50%) rotate(${-g}deg)`; $("liveLevel").classList.toggle("ok", Math.abs(g) < 1.5);
 }
 $("liveZoom").addEventListener("input", async e => { const z = +e.target.value; $("liveZoomV").textContent = z.toFixed(1) + "x"; try { await live.track.applyConstraints({ advanced: [{ zoom: z }] }); } catch (err) {} });
+function blendBox(p, c){ return { x: (p.x + c.x)/2, y: (p.y + c.y)/2, w: (p.w + c.w)/2, h: (p.h + c.h)/2 }; }
 async function liveTick(){
   if (!live.stream || live.busy) return; live.busy = true;
   try {
     const v = $("liveVideo"); if (!v.videoWidth) return;
-    const c = document.createElement("canvas"); const sc = 240 / v.videoWidth; c.width = 240; c.height = Math.round(v.videoHeight * sc);
+    const c = document.createElement("canvas"); c.width = 480; c.height = Math.round(v.videoHeight * 480 / v.videoWidth);
     c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
-    const a = analyze(c);
-    let faces = null; if ("FaceDetector" in window) { try { faces = await detectFaces(c); } catch (e) {} }
-    if (!live.catLocked) { const g = guessCategory(a, faces); if (g !== live.cat) { live.cat = g; liveChips(); } }
-    const tilt = live.tiltDev != null ? live.tiltDev : a.tilt;
-    const msgs = liveAdvice(a, faces, live.cat, tilt);
-    $("liveMsgs").innerHTML = msgs.map(m => `<div class="msg ${m.s}">${m.t}</div>`).join("");
+    const a = analyze(c), tilt = live.tiltDev != null ? live.tiltDev : a.tilt;
+    let det = null, ms = 0;
+    if (AI.state === "ready") { const t0 = performance.now(); det = await aiDetect(c); ms = Math.round(performance.now() - t0); }
+    let adv, subj = null, legacyFaces = null;
+    if (det) {
+      subj = pickSubject(det);
+      if (subj) { if (live.prev && live.prev.ko === subj.ko) subj.box = blendBox(live.prev.box, subj.box); live.prev = subj; adv = adviseSubject(subj, a, bgInfo(c, subj.box), tilt, true); }
+      else { live.prev = null; adv = adviseNoSubject(a, tilt, live.cat); }
+    } else {
+      if (live.faceOk !== false && "FaceDetector" in window) { legacyFaces = await detectFaces(c); if (legacyFaces === null) { live.faceFail = (live.faceFail || 0) + 1; if (live.faceFail >= 3) live.faceOk = false; } else live.faceFail = 0; }
+      adv = { headline: AI.state === "loading" ? "인식 모델 불러오는 중… 그동안 간이 안내" : "간이 모드 (물체 인식을 못 불러왔어요)", actions: liveAdvice(a, legacyFaces, live.cat, tilt), subject: null, cat: null };
+    }
+    if (adv.cat && !live.catLocked && adv.cat !== live.cat) { live.cat = adv.cat; liveChips(); }
+    let acts = adv.actions.slice(0, 3);
+    if (subj) { if (!acts.length) { live.stable++; acts = [{ t: live.stable > 3 ? "좋아요 — 지금 찍으세요" : "거의 맞았어요, 잠깐 멈추세요", s: "ok" }]; } else live.stable = 0; }
+    $("liveMsgs").innerHTML = `<div class="msg head">${adv.headline}</div>` + acts.map(m => `<div class="msg ${m.s}">${m.t}</div>`).join("");
     $("liveMeterPin").style.top = `${Math.round((1 - Math.min(1, Math.max(0, a.meanL))) * 100)}%`;
-    // 오버레이: 3분할 + 얼굴/주인공 + 목표 위치
-    const oc = $("liveOverlay"); const box = $("liveBox").getBoundingClientRect(); oc.width = Math.round(box.width); oc.height = Math.round(box.height);
+    const oc = $("liveOverlay"), box = $("liveBox").getBoundingClientRect(); oc.width = Math.round(box.width); oc.height = Math.round(box.height);
     const ctx = oc.getContext("2d"), W = oc.width, H = oc.height; ctx.clearRect(0, 0, W, H);
-    // object-fit: cover 보정 — 영상 비율과 박스 비율 차이
     const vr = v.videoWidth / v.videoHeight, br = W / H; let sx = 1, sy = 1, ox = 0, oy = 0;
     if (vr > br) { sx = (H * vr) / W; ox = (W - H * vr) / 2; } else { sy = (W / vr) / H; oy = (H - W / vr) / 2; }
-    const mapX = x => ox + x * W * sx, mapY = y => oy + y * H * sy;
     ctx.strokeStyle = "rgba(255,255,255,.4)"; ctx.lineWidth = 1;
     [1/3, 2/3].forEach(t => { ctx.beginPath(); ctx.moveTo(W*t, 0); ctx.lineTo(W*t, H); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0, H*t); ctx.lineTo(W, H*t); ctx.stroke(); });
-    if (faces && faces.length) { ctx.strokeStyle = "#f2a33a"; ctx.lineWidth = 2; faces.forEach(f => ctx.strokeRect(mapX(f.x), mapY(f.y), f.w*W*sx, f.h*H*sy)); }
-    else { ctx.fillStyle = "rgba(242,163,58,.85)"; ctx.beginPath(); ctx.arc(mapX(a.subject.x), mapY(a.subject.y), 7, 0, Math.PI*2); ctx.fill(); }
+    if (adv.subject) drawGuides(ctx, W, H, adv, { ox, oy, sx, sy });
+    else { const mx = x => ox + x * W * sx, my = y => oy + y * H * sy;
+      if (legacyFaces && legacyFaces.length) { ctx.strokeStyle = "#f2a33a"; ctx.lineWidth = 2; legacyFaces.forEach(f => ctx.strokeRect(mx(f.x), my(f.y), f.w*W*sx, f.h*H*sy)); }
+      else { ctx.fillStyle = "rgba(242,163,58,.85)"; ctx.beginPath(); ctx.arc(mx(a.subject.x), my(a.subject.y), 7, 0, Math.PI*2); ctx.fill(); } }
     if (live.ghostOn && live.ghost) { ctx.globalAlpha = 0.35; ctx.drawImage(live.ghost, ox, oy, W*sx, H*sy); ctx.globalAlpha = 1; }
-    live.lastFaces = faces;
+    const seen = det ? [...det.objects.filter(o => o.score >= 0.3).map(o => `${o.label} ${Math.round(o.score*100)}%`), ...det.faces.filter(f => f.score >= 0.5).map(f => `얼굴 ${Math.round(f.score*100)}%`)].slice(0, 5).join(", ") : "-";
+    const eng = AI.state === "ready" ? `${AI.human.tf.getBackend()} ${ms}ms` : AI.state === "loading" ? "모델 로딩 중" : AI.state === "failed" ? "모델 실패: " + AI.err.slice(0, 40) : "대기";
+    $("liveDebug").textContent = `엔진 ${eng} · 인식: ${seen} · 밝기 ${Math.round(a.meanL*100)}% · 기울기 ${tilt.toFixed(1)}°`;
+    if (AI.state === "ready" && ms > 2500) $("liveStatus").textContent = "이 폰에서는 인식이 느려요(그래픽 가속이 꺼진 상태일 수 있음). 안내가 몇 초 늦게 갱신됩니다.";
+  } catch (e) {
+    $("liveMsgs").innerHTML = `<div class="msg bad">분석 오류: ${String(e && e.message || e).slice(0, 90)}</div>`;
   } finally { live.busy = false; }
 }
 function liveAdvice(a, faces, cat, tilt){
@@ -746,7 +937,7 @@ if (["#edit","#ask","#coach","#live"].includes(location.hash)) initTab = locatio
 /* ───────── 시작 ───────── */
 (async () => {
   const demo = await loadDemo(); coach.canvas = toCanvas(demo, 1000); edit.src = toCanvas(demo, 1400); edit.srcStats = labStats(edit.src);
-  await runCoach(); showTab(initTab);
+  await runCoach({ ai: false }); showTab(initTab);
   if (window.claude && claude.use) {
     claude.use("downloads").then(d => { downloads = d; if (!d) $("saveStatus").textContent = ""; });
     claude.use("sample").then(s => { sample = s; if (!s) $("askAnswer").textContent = "이 화면에서는 클로드 호출을 쓸 수 없어요. Claude 앱에서 열면 됩니다."; });
