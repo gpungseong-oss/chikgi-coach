@@ -1,0 +1,762 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="mobile-web-app-capable" content="yes"><meta name="theme-color" content="#121110"><title>찍기코치</title></head><body><title>찍기코치</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@500;800&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
+<style>
+/* 레이아웃: 카메라 앱처럼 어두운 단일 테마. 위 탭, 가운데 사진, 아래 판정 카드. 강조색은 홍등 주황 하나. */
+:root{
+  --bg:#121110; --panel:#1c1a18; --panel2:#262321; --line:#35312d;
+  --fg:#f1ece4; --muted:#a39b90; --accent:#f2a33a; --accent-ink:#1a1206;
+  --ok:#6fcf8f; --warn:#f2c94c; --bad:#ef7a66;
+  --display:"Gothic A1",system-ui,sans-serif; --body:"IBM Plex Sans KR",system-ui,-apple-system,sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.5}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+.wrap{max-width:720px;margin:0 auto;padding-block:0 32px;padding-inline:16px}
+header{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);z-index:5;padding-block:12px 8px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.brand h1{font-family:var(--display);font-weight:800;font-size:22px;margin:0;letter-spacing:-.02em;white-space:nowrap}
+.brand small{color:var(--muted);font-size:12px}
+nav{display:flex;gap:6px;margin-top:10px}
+nav button{flex:1;background:var(--panel);color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:9px 6px;font:600 14px var(--body);cursor:pointer}
+nav button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+nav button:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+section.tab{padding-top:14px;display:flex;flex-direction:column;gap:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font:600 14px var(--body);cursor:pointer;min-width:0}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.grow{flex:1}
+.btn input[type=file]{display:none}
+.btn:disabled{opacity:.5;cursor:default}
+.stage{position:relative;background:#000;border-radius:12px;overflow:hidden;max-width:100%}
+.stage canvas{display:block;width:100%;height:auto;max-height:70vh;object-fit:contain;margin:0 auto}
+.stage .tag{position:absolute;left:10px;top:10px;background:rgba(0,0,0,.55);color:#fff;font-size:12px;padding:3px 8px;border-radius:6px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{background:var(--panel);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.cards{display:grid;grid-template-columns:1fr;gap:8px}
+@media(min-width:560px){.cards{grid-template-columns:1fr 1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.card h3{margin:0 0 4px;font:800 13px var(--display);letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.card p{margin:0;font-size:14px;color:var(--fg)}
+.pill{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.pill.ok{background:var(--ok)}.pill.warn{background:var(--warn)}.pill.bad{background:var(--bad)}
+.summary{background:linear-gradient(180deg,#2a2017,#1f1915);border:1px solid #4a3a22;border-radius:12px;padding:14px 16px}
+.summary h2{margin:0 0 6px;font:800 16px var(--display)}
+.summary ol{margin:0;padding-left:20px}
+.summary li{margin:4px 0}
+details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+details summary{cursor:pointer;font-weight:600}
+details ul{margin:8px 0 0;padding-left:18px;color:var(--fg)}
+details li{margin:4px 0;font-size:14px}
+label.field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);min-width:0}
+label.field input[type=text],textarea{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:14px var(--body);width:100%}
+textarea{min-height:90px;resize:vertical}
+.sliders{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
+@media(max-width:420px){.sliders{grid-template-columns:1fr}}
+.sl{display:flex;flex-direction:column;gap:2px;font-size:13px;color:var(--muted)}
+.sl span b{color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.cmd{display:flex;gap:8px}
+.cmd input{flex:1;background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:14px var(--body);min-width:0}
+.note{color:var(--muted);font-size:13px;margin:0}
+.answer{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;white-space:pre-wrap;font-size:14px;min-height:60px}
+.status{font-size:13px;color:var(--muted)}
+.hint{font-size:12px;color:var(--muted);margin:0}
+h2.sec{font:800 15px var(--display);margin:4px 0 0;color:var(--muted);letter-spacing:.04em}
+@media(prefers-reduced-motion:no-preference){.btn,.chip{transition:background .15s,color .15s}}
+.live{position:relative;background:#000;border-radius:12px;overflow:hidden;aspect-ratio:9/16;width:min(100%,calc(72vh * 9 / 16));margin:0 auto}
+.live video,.live canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.live .big{position:absolute;left:12px;right:12px;top:12px;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.live .big .msg{background:rgba(18,17,16,.78);color:#fff;border-left:4px solid var(--warn);border-radius:8px;padding:8px 12px;font:600 16px var(--body);line-height:1.35}
+.live .big .msg.ok{border-left-color:var(--ok)}.live .big .msg.bad{border-left-color:var(--bad)}
+.live .ctl{position:absolute;left:0;right:0;bottom:0;padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px));display:flex;gap:8px;align-items:center;background:linear-gradient(transparent,rgba(0,0,0,.7))}
+.live .shutter{width:62px;height:62px;border-radius:50%;background:#fff;border:4px solid rgba(255,255,255,.5);cursor:pointer;flex:none}
+.live .ctl .btn{background:rgba(28,26,24,.85)}
+.live .zoom{flex:1;display:flex;align-items:center;gap:6px;color:#fff;font-size:12px;min-width:0}
+.live .zoom input{flex:1;min-width:0}
+.live .meter{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:6px;height:120px;background:rgba(255,255,255,.25);border-radius:3px;pointer-events:none}
+.live .meter i{position:absolute;left:-6px;width:18px;height:3px;background:var(--accent);border-radius:2px;top:50%}
+.live .level{position:absolute;left:50%;top:50%;width:46%;height:2px;background:rgba(255,255,255,.8);transform:translate(-50%,-50%);transform-origin:center;pointer-events:none}
+.live .level.ok{background:var(--ok)}
+.live .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="brand"><h1>찍기코치</h1><small>카메라를 보면서 안내 · 전부 기기 안에서, 토큰 0</small></div>
+  <nav role="tablist">
+    <button role="tab" id="tabbtn-live" aria-selected="true" aria-controls="tab-live">라이브</button>
+    <button role="tab" id="tabbtn-coach" aria-selected="false" aria-controls="tab-coach">사진 판정</button>
+    <button role="tab" id="tabbtn-edit" aria-selected="false" aria-controls="tab-edit">편집</button>
+    <button role="tab" id="tabbtn-ask" aria-selected="false" aria-controls="tab-ask">클로드</button>
+  </nav>
+</header>
+
+<!-- ───────── 라이브 ───────── -->
+<section class="tab" id="tab-live" role="tabpanel">
+  <div class="chips" id="liveCats" aria-label="찍는 대상"></div>
+  <div class="live" id="liveBox">
+    <video id="liveVideo" autoplay muted playsinline></video>
+    <canvas id="liveOverlay"></canvas>
+    <div class="big" id="liveMsgs"><div class="msg">카메라를 켜면 여기에 안내가 뜹니다.</div></div>
+    <div class="level" id="liveLevel"></div>
+    <div class="meter" id="liveMeter"><i id="liveMeterPin"></i></div>
+    <div class="flash" id="liveFlash"></div>
+    <div class="ctl">
+      <button class="btn" id="liveStart" type="button">카메라 켜기</button>
+      <div class="zoom" id="liveZoomWrap" hidden><span>줌</span><input type="range" id="liveZoom" min="1" max="2" step="0.1" value="1"><b id="liveZoomV">1.0x</b></div>
+      <button class="shutter" id="liveShot" type="button" aria-label="촬영" hidden></button>
+    </div>
+  </div>
+  <div class="row">
+    <label class="btn grow">🎞 레퍼런스 겹쳐보기<input type="file" id="liveRef" accept="image/*,video/*"></label>
+    <button class="btn" id="liveGhost" type="button" hidden>겹침 끄기</button>
+    <label class="btn grow">📷 갤럭시 카메라로 찍기<input type="file" id="liveNative" accept="image/*" capture="environment"></label>
+  </div>
+  <p class="hint" id="liveDebug">분석 상태가 여기에 표시됩니다.</p>
+  <p class="status" id="liveStatus">카메라 켜기를 누르면 권한 창이 뜹니다. 허용하면 화면을 보면서 "뒤로·옆으로·노출" 안내가 실시간으로 뜹니다.</p>
+  <p class="hint">안내는 밝기·기울기·얼굴 위치·크기를 0.3초마다 계산해서 냅니다. 앱 안 촬영 버튼은 간편용이고, 최고 화질은 같은 구도로 '갤럭시 카메라로 찍기'를 쓰세요(찍은 사진은 '사진 판정' 탭으로 자동 이동).</p>
+</section>
+
+<!-- ───────── 촬영 코치 ───────── -->
+<section class="tab" id="tab-coach" role="tabpanel" hidden>
+  <div class="row">
+    <label class="btn primary grow">📷 찍기 / 사진 불러오기<input type="file" id="coachFile" accept="image/*" capture="environment"></label>
+    <label class="btn grow">🎞 레퍼런스 (사진·영상)<input type="file" id="coachRef" accept="image/*,video/*"></label>
+  </div>
+  <div class="chips" id="catChips" aria-label="찍는 대상"></div>
+  <div class="stage"><canvas id="coachCanvas" width="480" height="853"></canvas><span class="tag" id="coachTag">예시 화면</span></div>
+  <div class="summary" id="coachSummary"><h2>다시 찍을 때</h2><ol id="coachSteps"><li>사진을 찍거나 불러오면 여기에 지시가 뜹니다.</li></ol></div>
+  <div class="cards" id="coachCards"></div>
+  <details id="catTips"><summary>이 대상 기본 촬영법</summary><ul id="catTipList"></ul></details>
+  <details><summary>갤럭시 카메라 설정 (한 번만)</summary><ul>
+    <li>카메라 앱 → 설정(톱니) → <b>수직/수평 안내선</b> 켜기. 3분할 격자가 뜹니다.</li>
+    <li>화면을 길게 눌러 <b>노출·초점 고정</b>, 옆의 해 아이콘(또는 슬라이더)으로 밝기 조절. 밤거리·네온은 −0.7 정도가 조명이 살아납니다.</li>
+    <li>셔터·ISO를 직접 만지려면 <b>더보기 → 프로 / 프로 영상</b>. 야간 손촬영 사진은 셔터 1/50~1/60, ISO는 자동 상한 1600 정도에서 시작하세요.</li>
+    <li>영상은 <b>30fps</b> 그대로, 해상도 FHD면 충분. 60fps는 밝은 낮에만.</li>
+    <li>인물·음식은 <b>2x</b>(혹은 3x) 줌으로 두 걸음 물러서서 찍으면 왜곡이 줄고 배경이 정리됩니다. 0.5x 광각은 풍경·건물만.</li>
+  </ul></details>
+  <p class="hint">판정은 사진의 밝기·기울기·피사체 위치·선명도·색을 계산해서 내는 추정입니다. 카메라 설정값(셔터·ISO)은 사진에서 읽을 수 없어 일반 권장값을 안내합니다.</p>
+</section>
+
+<!-- ───────── 편집 ───────── -->
+<section class="tab" id="tab-edit" role="tabpanel" hidden>
+  <div class="row">
+    <label class="btn primary grow">🖼 내 사진<input type="file" id="editFile" accept="image/*"></label>
+    <label class="btn grow">🎞 레퍼런스 (사진·영상)<input type="file" id="editRef" accept="image/*,video/*"></label>
+  </div>
+  <div class="stage"><canvas id="editCanvas" width="480" height="853"></canvas><span class="tag" id="editTag">예시</span></div>
+  <div class="cmd"><input type="text" id="cmdInput" placeholder="예: 더 어둡게 / 따뜻하게 / 홍콩왕가위 / 자막 위로 / 원본으로"><button class="btn" id="cmdRun">적용</button></div>
+  <p class="status" id="cmdStatus">짧은 명령은 여기서 바로 처리됩니다(토큰 없음). 긴 요청은 '클로드에 묻기' 탭.</p>
+  <h2 class="sec">프리셋</h2>
+  <div class="chips" id="presetChips"></div>
+  <div class="sl"><span>레퍼런스 색 맞추기 세기 <b id="v_match">0</b>%</span><input type="range" id="s_match" min="0" max="100" value="0"></div>
+  <h2 class="sec">조정</h2>
+  <div class="sliders">
+    <div class="sl"><span>밝기 <b id="v_bright">0</b></span><input type="range" id="s_bright" min="-50" max="50" value="0"></div>
+    <div class="sl"><span>대비 <b id="v_contrast">0</b></span><input type="range" id="s_contrast" min="-50" max="50" value="0"></div>
+    <div class="sl"><span>채도 <b id="v_sat">0</b></span><input type="range" id="s_sat" min="-50" max="50" value="0"></div>
+    <div class="sl"><span>따뜻함 <b id="v_warm">0</b></span><input type="range" id="s_warm" min="-50" max="50" value="0"></div>
+    <div class="sl"><span>그림자 청록 <b id="v_teal">0</b></span><input type="range" id="s_teal" min="0" max="50" value="0"></div>
+    <div class="sl"><span>검정 띄우기 <b id="v_lift">0</b></span><input type="range" id="s_lift" min="0" max="30" value="0"></div>
+    <div class="sl"><span>비네팅 <b id="v_vig">0</b></span><input type="range" id="s_vig" min="0" max="60" value="0"></div>
+    <div class="sl"><span>그레인 <b id="v_grain">0</b></span><input type="range" id="s_grain" min="0" max="30" value="0"></div>
+  </div>
+  <h2 class="sec">비율</h2>
+  <div class="chips" id="ratioChips"></div>
+  <h2 class="sec">글자</h2>
+  <div class="row">
+    <label class="field grow">제목<input type="text" id="t_title" placeholder="Miryang life"></label>
+    <label class="field grow">부제<input type="text" id="t_sub" placeholder="밀양의 기록"></label>
+    <label class="field grow">계정<input type="text" id="t_handle" placeholder="@my.academy"></label>
+  </div>
+  <div class="chips" id="textPosChips"></div>
+  <div class="row">
+    <button class="btn primary grow" id="saveBtn">⬇ 저장 (JPG)</button>
+    <button class="btn" id="resetBtn">원본으로</button>
+  </div>
+  <p class="status" id="saveStatus"></p>
+  <p class="hint">영상 편집은 다음 버전에서 붙습니다. 지금은 영상을 레퍼런스로 넣어 그 색을 사진에 맞추는 것까지 됩니다.</p>
+</section>
+
+<!-- ───────── 클로드에 묻기 ───────── -->
+<section class="tab" id="tab-ask" role="tabpanel" hidden>
+  <p class="note">이 탭만 토큰(원장님 Claude 사용량)을 씁니다. 버튼을 누를 때만.</p>
+  <textarea id="askText" placeholder="예: 이 사진을 홍콩 레퍼런스처럼 만들려면 찍을 때 뭘 바꿔야 해? / 이 음식 사진 구도 어때?"></textarea>
+  <div class="chips">
+    <label class="chip"><input type="checkbox" id="askIncMine" checked> 내 사진 첨부</label>
+    <label class="chip"><input type="checkbox" id="askIncRef" checked> 레퍼런스 첨부</label>
+    <label class="chip"><input type="checkbox" id="askIncStats" checked> 판정 수치 첨부</label>
+  </div>
+  <div class="row"><button class="btn primary grow" id="askBtn">클로드에 묻기</button><button class="btn" id="askStop" hidden>중지</button></div>
+  <div class="answer" id="askAnswer">답이 여기에 표시됩니다.</div>
+</section>
+</div>
+
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+
+/* ───────── 공통: 파일 → 캔버스 ───────── */
+function fileToImage(file){
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file);
+    if (file.type.startsWith("video/")) {
+      const v = document.createElement("video");
+      v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = url;
+      v.addEventListener("loadedmetadata", () => { v.currentTime = Math.min(v.duration * 0.4, v.duration - 0.1) || 0; });
+      v.addEventListener("seeked", () => {
+        const c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight;
+        c.getContext("2d").drawImage(v, 0, 0); URL.revokeObjectURL(url); res(c);
+      });
+      v.addEventListener("error", () => rej(new Error("영상을 열 수 없어요")));
+    } else {
+      const im = new Image();
+      im.onload = () => { URL.revokeObjectURL(url); res(im); };
+      im.onerror = () => rej(new Error("사진을 열 수 없어요"));
+      im.src = url;
+    }
+  });
+}
+function toCanvas(src, maxEdge){
+  const w = src.naturalWidth || src.videoWidth || src.width, h = src.naturalHeight || src.videoHeight || src.height;
+  const s = Math.min(1, maxEdge / Math.max(w, h));
+  const c = document.createElement("canvas"); c.width = Math.round(w * s); c.height = Math.round(h * s);
+  c.getContext("2d").drawImage(src, 0, 0, c.width, c.height); return c;
+}
+function loadDemo(){ // 예시 화면: 직접 그린 밤거리 풍의 이미지 (외부 이미지 없음)
+  const c = document.createElement("canvas"); c.width = 540; c.height = 960; const x = c.getContext("2d");
+  const g = x.createLinearGradient(0, 0, 0, 960); g.addColorStop(0, "#10151c"); g.addColorStop(.55, "#1b1511"); g.addColorStop(1, "#0b0907"); x.fillStyle = g; x.fillRect(0, 0, 540, 960);
+  for (let i = 0; i < 9; i++) { const cx = 60 + i*58, cy = 170 + (i%3)*14; const r = x.createRadialGradient(cx, cy, 2, cx, cy, 46); r.addColorStop(0, "rgba(255,196,96,.95)"); r.addColorStop(1, "rgba(255,120,40,0)"); x.fillStyle = r; x.fillRect(cx-46, cy-46, 92, 92); }
+  x.fillStyle = "#2a1f18"; x.fillRect(0, 560, 540, 400);
+  x.fillStyle = "#e9e4dc"; x.beginPath(); x.arc(170, 600, 38, 0, 7); x.fill(); x.fillRect(122, 636, 96, 190);
+  x.fillStyle = "#15110e"; x.beginPath(); x.arc(330, 610, 36, 0, 7); x.fill(); x.fillRect(284, 644, 92, 180);
+  x.fillStyle = "rgba(242,163,58,.35)"; x.fillRect(0, 880, 540, 3);
+  return Promise.resolve(c); }
+
+/* ───────── 분석 (순수 계산) ───────── */
+function analyze(canvas){
+  const W = 360, s = W / canvas.width, H = Math.max(1, Math.round(canvas.height * s));
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const ctx = c.getContext("2d", { willReadFrequently: true }); ctx.drawImage(canvas, 0, 0, W, H);
+  const d = ctx.getImageData(0, 0, W, H).data, N = W * H;
+  const L = new Float32Array(N); let sumL = 0, dark = 0, bright = 0, sumS = 0;
+  let castR = 0, castB = 0, castN = 0; const hueHist = new Float32Array(12);
+  for (let i = 0, p = 0; i < N; i++, p += 4) {
+    const r = d[p] / 255, g = d[p+1] / 255, b = d[p+2] / 255;
+    const l = 0.2126*r + 0.7152*g + 0.0722*b; L[i] = l; sumL += l;
+    if (l < 0.08) dark++; if (l > 0.95) bright++;
+    const mx = Math.max(r,g,b), mn = Math.min(r,g,b), sat = mx ? (mx-mn)/mx : 0; sumS += sat;
+    if (l > 0.3 && l < 0.9 && sat < 0.25) { castR += r; castB += b; castN++; }
+    if (sat > 0.25 && l > 0.1) { let hh; const dd = mx-mn;
+      if (mx === r) hh = ((g-b)/dd + 6) % 6; else if (mx === g) hh = (b-r)/dd + 2; else hh = (r-g)/dd + 4;
+      hueHist[Math.floor(hh*2) % 12] += sat; }
+  }
+  const meanL = sumL/N, meanS = sumS/N;
+  const cast = castN ? (castR - castB)/castN : 0;
+  // 선명도: 라플라시안 분산
+  let lap = 0, lap2 = 0, ln = 0;
+  for (let y = 1; y < H-1; y++) for (let x = 1; x < W-1; x++) {
+    const i = y*W+x, v = (4*L[i] - L[i-1] - L[i+1] - L[i-W] - L[i+W]) * 255; lap += v; lap2 += v*v; ln++; }
+  const sharp = lap2/ln - (lap/ln)**2;
+  // 기울기: 수평에 가까운 강한 엣지의 각도 분포
+  const bins = new Float32Array(101); let edgeW = 0; const edgeMap = new Float32Array(N);
+  for (let y = 1; y < H-1; y++) for (let x = 1; x < W-1; x++) {
+    const i = y*W+x;
+    const gx = (L[i+1-W] + 2*L[i+1] + L[i+1+W]) - (L[i-1-W] + 2*L[i-1] + L[i-1+W]);
+    const gy = (L[i-W-1] + 2*L[i-W] + L[i-W+1]) - (L[i+W-1] + 2*L[i+W] + L[i+W+1]);
+    const m = Math.hypot(gx, gy); edgeMap[i] = m;
+    if (m < 0.35) continue;
+    let a = Math.atan2(gy, gx) * 180/Math.PI; // 그래디언트 방향; 수평 엣지는 gy 우세 → a≈±90
+    let tilt = a - 90; if (tilt < -90) tilt += 180; if (tilt > 90) tilt -= 180; // 엣지 기울기
+    if (Math.abs(tilt) <= 25) { bins[Math.round((tilt + 25) * 2)] += m; edgeW += m; }
+  }
+  let peak = 0; for (let k = 1; k < bins.length; k++) if (bins[k] > bins[peak]) peak = k;
+  let tilt = (peak/2 - 25); const tiltConf = edgeW ? bins[peak]/edgeW : 0;
+  if (tiltConf < 0.08) tilt = 0;
+  // 피사체 추정: 6x6 셀의 관심도(대비+채도+엣지)
+  const G = 6, cells = [];
+  for (let gy = 0; gy < G; gy++) for (let gx = 0; gx < G; gx++) {
+    let sl = 0, sl2 = 0, se = 0, n = 0;
+    for (let y = Math.floor(gy*H/G); y < Math.floor((gy+1)*H/G); y++) for (let x = Math.floor(gx*W/G); x < Math.floor((gx+1)*W/G); x++) {
+      const i = y*W+x; sl += L[i]; sl2 += L[i]*L[i]; se += edgeMap[i]; n++; }
+    const std = Math.sqrt(Math.max(0, sl2/n - (sl/n)**2));
+    cells.push({ gx, gy, score: std*2 + se/n*3 });
+  }
+  cells.sort((a,b) => b.score - a.score);
+  const top = cells.slice(0, 4); let cx = 0, cy = 0, cw = 0;
+  top.forEach(t => { cx += (t.gx+0.5)/G*t.score; cy += (t.gy+0.5)/G*t.score; cw += t.score; });
+  const subject = { x: cw ? cx/cw : 0.5, y: cw ? cy/cw : 0.5 };
+  // 하늘: 윗부분 15%
+  let skyL = 0, skyB = 0, skyN = 0;
+  for (let y = 0; y < Math.floor(H*0.15); y++) for (let x = 0; x < W; x++) { const p = (y*W+x)*4; skyL += L[y*W+x]; skyB += (d[p+2]-d[p])/255; skyN++; }
+  const sky = skyN && skyL/skyN > 0.55 && skyB/skyN > 0.05;
+  // 수평선 추정: 행 평균 밝기가 가장 크게 떨어지는 지점(윗 70% 안)
+  let horizon = null; if (sky) { let best = 0, bestY = 0;
+    const rowMean = y => { let s = 0; for (let x = 0; x < W; x++) s += L[y*W+x]; return s/W; };
+    let prev = rowMean(0); for (let y = 4; y < H*0.7; y += 4) { const m = rowMean(y); if (prev - m > best) { best = prev - m; bestY = y; } prev = m; }
+    if (best > 0.12) horizon = bestY / H; }
+  const warmHue = (hueHist[0] + hueHist[1] + hueHist[11]) / (hueHist.reduce((a,b) => a+b, 0) || 1);
+  return { meanL, dark: dark/N, bright: bright/N, meanS, cast, sharp, tilt, tiltConf, subject, sky, horizon, warmHue,
+           shadowTeal: shadowHue(d, L, N) };
+}
+function shadowHue(d, L, N){ // 그림자(루마<0.2)의 평균 색: 청록이면 b+g > r
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let i = 0, p = 0; i < N; i += 7, p += 28) if (L[i] < 0.2 && L[i] > 0.02) { r += d[p]; g += d[p+1]; b += d[p+2]; n++; }
+  if (!n) return 0; return ((g+b)/2 - r) / 255 / Math.max(0.02, (r+g+b)/3/255);
+}
+async function detectFaces(canvas){
+  if (!("FaceDetector" in window)) return null;
+  try { const fd = new window.FaceDetector({ maxDetectedFaces: 5, fastMode: true });
+    const faces = await Promise.race([fd.detect(canvas), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 400))]);
+    return faces.map(f => ({ x: f.boundingBox.x/canvas.width, y: f.boundingBox.y/canvas.height, w: f.boundingBox.width/canvas.width, h: f.boundingBox.height/canvas.height }));
+  } catch (e) { return null; }
+}
+
+/* ───────── 대상별 지식 ───────── */
+const CATS = {
+  "인물": ["눈높이에서 찍기. 아이는 쪼그려 앉아서.", "얼굴을 3분할선 교차점(왼쪽·오른쪽 1/3)에.", "2x 줌으로 두 걸음 물러서면 얼굴 왜곡이 줄고 배경이 정리됨.", "역광이면 얼굴을 길게 눌러 노출 고정.", "인물 모드는 머리카락·안경테 경계가 깨지면 끄기."],
+  "음식": ["창가 자연광, 플래시 끄기. 창을 옆에 두고(측광).", "45도 또는 바로 위(탑뷰) 두 가지만 쓰면 실패 없음.", "한 발 가까이. 접시 테두리는 잘려도 됨.", "배경에 휴지·휴대폰·물컵 치우기.", "노출 −0.3이면 색이 진해져 맛있어 보임.", "김이 나는 건 어두운 배경에서 역광으로."],
+  "풍경": ["수평 맞추기(안내선 켜기). 1도만 기울어도 티남.", "수평선은 한가운데 말고 위 1/3 또는 아래 1/3.", "앞에 뭔가(사람·난간·꽃) 넣어 깊이 만들기.", "일출 후·일몰 전 1시간이 색이 제일 좋음.", "0.5x 광각은 가장자리가 휘니 하늘·바다처럼 큰 장면에만."],
+  "거리·건물": ["세로로 찍기. 간판·조명이 많은 골목이 '도쿄·홍콩 느낌'의 핵심.", "밤엔 야간모드 끄고 노출 −0.7. 조명이 날아가지 않음.", "사람이 지나가는 순간에 셔터(생동감).", "건물 수직선이 기울면 촌스러움 → 카메라를 똑바로, 또는 편집에서 수직 보정.", "벽·난간에 팔꿈치 고정. 영상은 걸으며 찍되 무릎을 굽혀 부드럽게."],
+  "야경": ["노출 −0.7~−1.0. 밝게 찍으면 네온이 하얗게 날아감.", "야간모드는 정지 장면만(사람·차 움직이면 뭉개짐).", "영상은 30fps 유지, 프로 영상이면 셔터 1/50.", "광원을 정면으로 보지 말고 비스듬히.", "젖은 바닥·유리 반사를 앞에 넣으면 영화 느낌."],
+  "제품·소품": ["배경 단순하게(흰 종이·나무 책상 하나).", "빛은 옆에서(측광), 그림자 방향 한 가지.", "탑뷰 또는 45도. 소품은 홀수로 배치.", "2x 줌으로 떨어져 찍으면 형태가 정확해짐."],
+  "실내": ["창을 등지지 말기(사람이 실루엣 됨).", "형광등+백열등 섞이면 색이 탁해짐 → 하나만 켜기.", "벽·문틀 수직선 똑바로.", "넓어 보이게는 0.5x 광각, 단 구석에서 대각선으로."],
+  "일반": ["3분할 격자 켜고 주인공을 교차점에.", "배경 정리 → 한 걸음 가까이 → 노출 터치. 이 세 가지면 절반은 해결.", "같은 장면을 세로·가로 둘 다 찍어두기."]
+};
+function guessCategory(a, faces){
+  if (faces && faces.length) return "인물";
+  if (a.sky && a.meanL > 0.45) return "풍경";
+  if (a.meanL < 0.28 && a.meanS > 0.2) return "야경";
+  if (a.warmHue > 0.55 && a.meanS > 0.3 && a.meanL > 0.3) return "음식";
+  if (a.meanL < 0.4 && a.sharp > 60) return "거리·건물";
+  return "일반";
+}
+const third = v => v < 0.38 ? 0 : v > 0.62 ? 2 : 1;
+const side = ["왼쪽", "가운데", "오른쪽"], vside = ["위", "가운데", "아래"];
+
+function verdicts(a, faces, cat, ref){
+  const out = [], steps = [];
+  const add = (title, status, msg, step) => { out.push({ title, status, msg }); if (step) steps.push(step); };
+  // 노출
+  if (a.meanL < 0.22 || a.dark > 0.45) add("노출", "bad", `어둡게 찍혔어요 (평균 밝기 ${Math.round(a.meanL*100)}%). ${cat==="야경"||cat==="거리·건물" ? "밤 장면은 이 정도가 정상일 수 있어요. 조명이 보이면 OK." : "밝은 쪽을 터치해 노출 고정 후 해 아이콘으로 +0.3, 또는 창가·조명 쪽으로 이동."}`, cat==="야경"||cat==="거리·건물" ? null : "밝은 곳으로 옮기거나 노출 +0.3");
+  else if (a.meanL > 0.72 || a.bright > 0.08) add("노출", "warn", `밝은 부분이 날아갔어요 (하이라이트 ${Math.round(a.bright*100)}%). 노출 −0.7로 낮추면 색이 살아요.`, "노출 −0.7 (화면 터치 후 해 아이콘 아래로)");
+  else add("노출", "ok", `노출 적당 (평균 밝기 ${Math.round(a.meanL*100)}%).`);
+  // 수평
+  if (cat !== "음식" && cat !== "제품·소품") {
+    if (Math.abs(a.tilt) >= 1.5) add("수평", a.tilt >= 3 ? "bad" : "warn", `${a.tilt > 0 ? "오른쪽" : "왼쪽"}으로 약 ${Math.abs(a.tilt).toFixed(1)}° 기울어 보여요. 안내선 켜고 수평 맞추세요.`, `카메라를 ${a.tilt > 0 ? "왼쪽" : "오른쪽"}으로 ${Math.abs(a.tilt).toFixed(0)}° 돌려 수평 맞추기`);
+    else add("수평", "ok", "수평 괜찮아요.");
+  }
+  // 위치/거리
+  const f = faces && faces.length ? faces.reduce((m, x) => x.h > m.h ? x : m) : null;
+  if (f) {
+    const fx = f.x + f.w/2, fy = f.y + f.h/2, tx = third(fx);
+    if (f.h > 0.32) add("거리", "warn", "얼굴이 화면의 1/3 이상. 너무 가까워 코·이마가 커 보여요. 두 걸음 뒤로 가서 2x 줌.", "두 걸음 뒤로 + 2x 줌");
+    else if (f.h < 0.07) add("거리", "warn", "얼굴이 작아요. 세 걸음 가까이 가거나 2x 줌.", "가까이 가기 (2x 줌)");
+    else add("거리", "ok", "얼굴 크기 적당해요.");
+    if (f.y < 0.03) add("여백", "bad", "머리 위 여백이 없어요. 카메라를 살짝 올리세요.", "카메라 조금 위로 (머리 위 여백)");
+    else if (f.y > 0.4) add("여백", "warn", "머리 위가 너무 비었어요. 카메라를 내리거나 가까이.", "카메라 조금 아래로");
+    if (tx === 1 && cat === "인물") add("위치", "warn", `얼굴이 정가운데예요. 왼쪽이나 오른쪽 1/3선에 두면 배경이 살아요${ref && ref.subject ? ` (레퍼런스는 ${side[third(ref.subject.x)]})` : ""}.`, `인물을 ${ref && ref.subject ? side[third(ref.subject.x)] : "왼쪽 또는 오른쪽"} 1/3선으로`);
+    else add("위치", "ok", `얼굴이 ${side[tx]} ${vside[third(fy)]}에 있어요.`);
+  } else {
+    const sx = third(a.subject.x), sy = third(a.subject.y);
+    if (cat === "풍경" && a.horizon != null) {
+      if (a.horizon > 0.4 && a.horizon < 0.6) add("수평선", "warn", `수평선이 한가운데(${Math.round(a.horizon*100)}%)예요. 하늘이 예쁘면 아래 1/3로, 땅·바다가 주인공이면 위 1/3로.`, "수평선을 1/3 지점으로");
+      else add("수평선", "ok", `수평선 위치 ${Math.round(a.horizon*100)}%, 좋아요.`);
+    }
+    if (cat === "음식" || cat === "제품·소품") add("위치", sx === 1 ? "ok" : "warn", sx === 1 ? "주인공이 가운데. 음식·소품은 이게 맞아요." : `주인공이 ${side[sx]}에 치우쳐 보여요. 접시를 가운데로 넣거나 의도면 그대로.`, sx === 1 ? null : "접시를 가운데로");
+    else add("주인공 위치", "ok", `시선이 가는 부분은 ${side[sx]} ${vside[sy]} 쪽이에요${ref && ref.subject ? ` (레퍼런스는 ${side[third(ref.subject.x)]} ${vside[third(ref.subject.y)]})` : ""}.`, ref && ref.subject && (third(ref.subject.x) !== sx) ? `주인공을 ${side[third(ref.subject.x)]}으로 옮겨 레퍼런스 구도 맞추기` : null);
+  }
+  // 선명도
+  if (a.sharp < 35) add("초점·흔들림", "bad", "흐려 보여요. 피사체를 터치해 초점 잡고, 팔꿈치를 몸에 붙인 뒤 숨 멈추고 셔터.", "초점 터치 + 팔꿈치 고정");
+  else if (a.sharp < 90) add("초점·흔들림", "warn", "조금 무른 편. 밤이면 정상 범위, 낮이면 초점을 다시 터치해 보세요.");
+  else add("초점·흔들림", "ok", "선명해요.");
+  // 색
+  if (a.cast > 0.13) add("색 온도", "warn", "노랗게 떠요(실내 전구). 카메라 화이트밸런스 '백열등' 또는 편집에서 따뜻함 −20.", "화이트밸런스 백열등/편집에서 차갑게");
+  else if (a.cast < -0.13) add("색 온도", "warn", "푸르게 떠요(그늘·형광등). 화이트밸런스 '흐림' 또는 편집에서 따뜻함 +20.", "편집에서 따뜻함 +20");
+  else add("색 온도", "ok", "색이 자연스러워요.");
+  // 레퍼런스 비교
+  if (ref) {
+    const dl = ref.meanL - a.meanL, ds = ref.meanS - a.meanS, msgs = [];
+    if (Math.abs(dl) > 0.12) msgs.push(`레퍼런스가 ${dl > 0 ? "더 밝음" : "더 어두움"}(${Math.round(Math.abs(dl)*100)}%p) → 찍을 때 노출 ${dl > 0 ? "+0.5" : "−0.7"}`);
+    if (Math.abs(ds) > 0.1) msgs.push(`채도 ${ds > 0 ? "더 진함" : "더 연함"} → 편집에서 맞춰짐`);
+    if (ref.shadowTeal > 0.12 && a.shadowTeal < 0.08) msgs.push("레퍼런스 그림자가 청록(시네마틱) → 편집 '그림자 청록'으로 맞춰짐");
+    if (ref.tilt && Math.abs(ref.tilt) < 1.5 && Math.abs(a.tilt) >= 1.5) msgs.push("레퍼런스는 수평이 정확함");
+    add("레퍼런스와 비교", msgs.length ? "warn" : "ok", msgs.length ? msgs.join(". ") + "." : "밝기·채도·색 분위기가 레퍼런스와 비슷해요. 편집 탭에서 '레퍼런스 색 맞추기'로 마무리.");
+  }
+  return { cards: out, steps: steps.slice(0, 4) };
+}
+
+/* ───────── 코치 탭 UI ───────── */
+const coach = { canvas: null, analysis: null, faces: null, cat: null, catLocked: false, ref: null, refCanvas: null, mineFile: null, refFile: null };
+function renderChips(el, items, current, onPick){
+  el.innerHTML = ""; items.forEach(name => { const b = document.createElement("button"); b.className = "chip"; b.type = "button"; b.textContent = name;
+    b.setAttribute("aria-pressed", String(name === current)); b.onclick = () => onPick(name); el.appendChild(b); });
+}
+function drawCoach(){
+  const cv = $("coachCanvas"), src = coach.canvas; if (!src) return;
+  cv.width = src.width; cv.height = src.height; const ctx = cv.getContext("2d"); ctx.drawImage(src, 0, 0);
+  const W = cv.width, H = cv.height; ctx.lineWidth = Math.max(1, W/400);
+  ctx.strokeStyle = "rgba(255,255,255,.45)"; ctx.setLineDash([]);
+  [1/3, 2/3].forEach(t => { ctx.beginPath(); ctx.moveTo(W*t, 0); ctx.lineTo(W*t, H); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0, H*t); ctx.lineTo(W, H*t); ctx.stroke(); });
+  const a = coach.analysis; if (!a) return;
+  if (coach.faces && coach.faces.length) { ctx.strokeStyle = "#f2a33a"; ctx.lineWidth = Math.max(2, W/250);
+    coach.faces.forEach(f => ctx.strokeRect(f.x*W, f.y*H, f.w*W, f.h*H)); }
+  else { ctx.fillStyle = "rgba(242,163,58,.9)"; ctx.beginPath(); ctx.arc(a.subject.x*W, a.subject.y*H, Math.max(6, W/60), 0, Math.PI*2); ctx.fill(); }
+  if (Math.abs(a.tilt) >= 1.5) { ctx.strokeStyle = "#ef7a66"; ctx.lineWidth = Math.max(2, W/300); ctx.beginPath();
+    const r = a.tilt*Math.PI/180, len = W*0.45; ctx.moveTo(W/2 - Math.cos(r)*len, H/2 - Math.sin(r)*len); ctx.lineTo(W/2 + Math.cos(r)*len, H/2 + Math.sin(r)*len); ctx.stroke(); }
+  if (a.horizon != null) { ctx.strokeStyle = "rgba(111,207,143,.9)"; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.moveTo(0, a.horizon*H); ctx.lineTo(W, a.horizon*H); ctx.stroke(); ctx.setLineDash([]); }
+}
+async function runCoach(){
+  if (!coach.canvas) return;
+  coach.analysis = analyze(coach.canvas);
+  coach.faces = await detectFaces(coach.canvas);
+  if (!coach.catLocked) coach.cat = guessCategory(coach.analysis, coach.faces);
+  renderChips($("catChips"), Object.keys(CATS), coach.cat, name => { coach.cat = name; coach.catLocked = true; runCoach(); });
+  const v = verdicts(coach.analysis, coach.faces, coach.cat, coach.ref);
+  $("coachCards").innerHTML = v.cards.map(c => `<div class="card"><h3><span class="pill ${c.status}"></span>${c.title}</h3><p>${c.msg}</p></div>`).join("");
+  $("coachSteps").innerHTML = (v.steps.length ? v.steps : ["이대로 좋아요. 같은 자리에서 세로·가로 한 장씩 더."]).map(s => `<li>${s}</li>`).join("");
+  $("catTipList").innerHTML = CATS[coach.cat].map(t => `<li>${t}</li>`).join("");
+  $("catTips").querySelector("summary").textContent = `'${coach.cat}' 기본 촬영법`;
+  drawCoach();
+}
+$("coachFile").addEventListener("change", async e => { const f = e.target.files[0]; if (!f) return;
+  try { const im = await fileToImage(f); coach.canvas = toCanvas(im, 1400); coach.mineFile = f; coach.catLocked = false; $("coachTag").textContent = "내 사진"; await runCoach(); }
+  catch (err) { $("coachSteps").innerHTML = `<li>${err.message}</li>`; } });
+$("coachRef").addEventListener("change", async e => { const f = e.target.files[0]; if (!f) return;
+  try { const im = await fileToImage(f); coach.refCanvas = toCanvas(im, 900); coach.ref = analyze(coach.refCanvas); coach.refFile = f;
+    if (!edit.ref) setEditRef(coach.refCanvas, f); await runCoach(); $("coachTag").textContent += " · 레퍼런스 비교 중"; }
+  catch (err) { $("coachSteps").innerHTML = `<li>${err.message}</li>`; } });
+
+/* ───────── 편집 ───────── */
+const PRESETS = {
+  "없음": {},
+  "도쿄홍등": { contrast: 12, sat: 15, warm: 12, teal: 12, lift: 0, vig: 30, grain: 4 },
+  "홍콩왕가위": { contrast: 20, sat: 5, warm: -6, teal: 32, lift: 3, vig: 35, grain: 10 },
+  "홍콩필름": { contrast: 5, sat: -12, warm: 10, teal: 4, lift: 10, vig: 22, grain: 14 },
+  "깨끗하게": { contrast: 8, sat: 6, warm: 0, teal: 0, lift: 0, vig: 0, grain: 0 }
+};
+const RATIOS = { "원본": null, "4:5": 4/5, "9:16": 9/16, "1:1": 1, "3:4": 3/4 };
+const TPOS = ["오른쪽 위", "왼쪽 위", "오른쪽 아래", "왼쪽 아래", "가운데"];
+const edit = { src: null, ref: null, refStats: null, refFile: null, mineFile: null, preset: "없음", ratio: "원본", tpos: "오른쪽 위",
+  p: { match: 0, bright: 0, contrast: 0, sat: 0, warm: 0, teal: 0, lift: 0, vig: 0, grain: 0 }, srcStats: null, timer: null };
+const SLIDERS = ["match", "bright", "contrast", "sat", "warm", "teal", "lift", "vig", "grain"];
+
+// sRGB ↔ Lab
+function rgb2lab(r, g, b){
+  r /= 255; g /= 255; b /= 255;
+  r = r > 0.04045 ? Math.pow((r+0.055)/1.055, 2.4) : r/12.92; g = g > 0.04045 ? Math.pow((g+0.055)/1.055, 2.4) : g/12.92; b = b > 0.04045 ? Math.pow((b+0.055)/1.055, 2.4) : b/12.92;
+  let x = (r*0.4124 + g*0.3576 + b*0.1805)/0.95047, y = (r*0.2126 + g*0.7152 + b*0.0722), z = (r*0.0193 + g*0.1192 + b*0.9505)/1.08883;
+  x = x > 0.008856 ? Math.cbrt(x) : 7.787*x + 16/116; y = y > 0.008856 ? Math.cbrt(y) : 7.787*y + 16/116; z = z > 0.008856 ? Math.cbrt(z) : 7.787*z + 16/116;
+  return [116*y - 16, 500*(x - y), 200*(y - z)];
+}
+function lab2rgb(L, A, B){
+  let y = (L+16)/116, x = A/500 + y, z = y - B/200;
+  const f = t => t*t*t > 0.008856 ? t*t*t : (t - 16/116)/7.787;
+  x = f(x)*0.95047; y = f(y); z = f(z)*1.08883;
+  let r = x*3.2406 + y*-1.5372 + z*-0.4986, g = x*-0.9689 + y*1.8758 + z*0.0415, b = x*0.0557 + y*-0.2040 + z*1.0570;
+  const gm = c => { c = c > 0.0031308 ? 1.055*Math.pow(c, 1/2.4) - 0.055 : 12.92*c; return Math.max(0, Math.min(255, Math.round(c*255))); };
+  return [gm(r), gm(g), gm(b)];
+}
+function labStats(canvas){
+  const c = document.createElement("canvas"); const s = Math.min(1, 240/Math.max(canvas.width, canvas.height));
+  c.width = Math.max(1, Math.round(canvas.width*s)); c.height = Math.max(1, Math.round(canvas.height*s));
+  const d = c.getContext("2d", { willReadFrequently: true }); d.drawImage(canvas, 0, 0, c.width, c.height);
+  const px = d.getImageData(0, 0, c.width, c.height).data, n = c.width*c.height;
+  const m = [0,0,0], v = [0,0,0];
+  for (let i = 0; i < px.length; i += 4) { const l = rgb2lab(px[i], px[i+1], px[i+2]); for (let k = 0; k < 3; k++) { m[k] += l[k]; v[k] += l[k]*l[k]; } }
+  const mean = m.map(x => x/n), std = v.map((x, k) => Math.sqrt(Math.max(1e-6, x/n - mean[k]*mean[k])));
+  return { mean, std };
+}
+function cropCanvas(src, ratio){
+  if (!ratio) return src;
+  let w = src.width, h = src.height; if (w/h > ratio) w = Math.round(h*ratio); else h = Math.round(w/ratio);
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  c.getContext("2d").drawImage(src, (src.width-w)/2, (src.height-h)/2, w, h, 0, 0, w, h); return c;
+}
+function renderEdit(maxEdge, forExport){
+  if (!edit.src) return null;
+  const base = cropCanvas(toCanvas(edit.src, maxEdge), RATIOS[edit.ratio]);
+  const W = base.width, H = base.height, ctx = base.getContext("2d", { willReadFrequently: true });
+  const img = ctx.getImageData(0, 0, W, H), d = img.data, p = edit.p;
+  const match = p.match/100, doMatch = match > 0 && edit.refStats && edit.srcStats;
+  const rs = edit.refStats, ss = edit.srcStats;
+  const bright = p.bright*1.2, contrast = 1 + p.contrast/100, sat = 1 + p.sat/100, warm = p.warm*0.6, teal = p.teal/100, lift = p.lift*1.2;
+  const vig = p.vig/100, grain = p.grain, cx = W/2, cy = H/2, rmax = Math.hypot(cx, cy);
+  let seed = 12345; const rnd = () => { seed = (seed*1103515245 + 12345) & 0x7fffffff; return seed/0x7fffffff - 0.5; };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y*W + x)*4; let r = d[i], g = d[i+1], b = d[i+2];
+    if (doMatch) { const l = rgb2lab(r, g, b);
+      const L2 = (l[0]-ss.mean[0])*(rs.std[0]/ss.std[0]) + rs.mean[0], A2 = (l[1]-ss.mean[1])*(rs.std[1]/ss.std[1]) + rs.mean[1], B2 = (l[2]-ss.mean[2])*(rs.std[2]/ss.std[2]) + rs.mean[2];
+      const o = lab2rgb(l[0] + (L2-l[0])*match, l[1] + (A2-l[1])*match, l[2] + (B2-l[2])*match); r = o[0]; g = o[1]; b = o[2]; }
+    // 밝기·대비
+    r = (r - 128)*contrast + 128 + bright; g = (g - 128)*contrast + 128 + bright; b = (b - 128)*contrast + 128 + bright;
+    // 채도
+    const lum = 0.2126*r + 0.7152*g + 0.0722*b; r = lum + (r-lum)*sat; g = lum + (g-lum)*sat; b = lum + (b-lum)*sat;
+    // 따뜻함
+    r += warm; b -= warm;
+    // 그림자 청록 (어두울수록 강하게), 검정 띄우기
+    if (teal > 0) { const w = Math.max(0, 1 - lum/140); r -= 28*teal*w; g += 8*teal*w; b += 22*teal*w; }
+    if (lift > 0) { r = lift + r*(255-lift)/255; g = lift + g*(255-lift)/255; b = lift + b*(255-lift)/255; }
+    // 비네팅
+    if (vig > 0) { const dd = Math.hypot(x-cx, y-cy)/rmax; const f = 1 - vig*Math.max(0, dd-0.35)*1.6; r *= f; g *= f; b *= f; }
+    if (grain > 0) { const n = rnd()*grain*2; r += n; g += n; b += n; }
+    d[i] = r < 0 ? 0 : r > 255 ? 255 : r; d[i+1] = g < 0 ? 0 : g > 255 ? 255 : g; d[i+2] = b < 0 ? 0 : b > 255 ? 255 : b;
+  }
+  ctx.putImageData(img, 0, 0);
+  drawText(ctx, W, H);
+  return base;
+}
+function drawText(ctx, W, H){
+  const title = $("t_title").value.trim(), sub = $("t_sub").value.trim(), handle = $("t_handle").value.trim();
+  if (!title && !sub && !handle) return;
+  const pad = W*0.065, right = edit.tpos.includes("오른쪽"), bottom = edit.tpos.includes("아래"), center = edit.tpos === "가운데";
+  ctx.fillStyle = "#fff"; ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = W*0.01; ctx.shadowOffsetY = W*0.003;
+  const x = center ? W/2 : right ? W - pad : pad;
+  const lines = [];
+  if (title) lines.push({ t: title, f: `800 ${Math.round(W*0.062)}px "Gothic A1", sans-serif`, h: Math.round(W*0.07) });
+  if (sub) lines.push({ t: sub, f: `400 ${Math.round(W*0.03)}px "IBM Plex Sans KR", sans-serif`, h: Math.round(W*0.045) });
+  const block = lines.reduce((s, l) => s + l.h, 0);
+  let y = center ? H/2 - block/2 : bottom ? H - pad - (handle ? W*0.05 : 0) - block : pad + W*0.02;
+  ctx.textAlign = center ? "center" : right ? "right" : "left"; ctx.textBaseline = "top";
+  lines.forEach(ln => { ctx.font = ln.f; ctx.fillText(ln.t, x, y); y += ln.h; });
+  if (handle) { ctx.font = `600 ${Math.round(W*0.024)}px "IBM Plex Sans KR", sans-serif`; ctx.textAlign = right || center ? "right" : "left"; ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.textBaseline = "alphabetic";
+    ctx.fillText(handle, right || center ? W - pad : pad, H - pad*0.7); }
+  ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; ctx.textBaseline = "alphabetic";
+}
+function scheduleEdit(){ clearTimeout(edit.timer); edit.timer = setTimeout(() => {
+  const out = renderEdit(900, false); if (!out) return; const cv = $("editCanvas"); cv.width = out.width; cv.height = out.height; cv.getContext("2d").drawImage(out, 0, 0); }, 60); }
+function syncSliders(){ SLIDERS.forEach(k => { $("s_"+k).value = edit.p[k]; $("v_"+k).textContent = edit.p[k]; }); }
+function applyPreset(name){ edit.preset = name; const q = PRESETS[name] || {};
+  ["bright","contrast","sat","warm","teal","lift","vig","grain"].forEach(k => edit.p[k] = q[k] || 0);
+  renderChips($("presetChips"), Object.keys(PRESETS), name, applyPreset); syncSliders(); scheduleEdit(); }
+function setEditRef(canvas, file){ edit.ref = canvas; edit.refStats = labStats(canvas); edit.refFile = file; if (edit.p.match === 0) edit.p.match = 70; syncSliders(); $("editTag").textContent = (edit.mineFile ? "내 사진" : "예시") + " · 레퍼런스 색 맞춤"; scheduleEdit(); }
+SLIDERS.forEach(k => $("s_"+k).addEventListener("input", e => { edit.p[k] = +e.target.value; $("v_"+k).textContent = edit.p[k]; scheduleEdit(); }));
+["t_title","t_sub","t_handle"].forEach(id => $(id).addEventListener("input", scheduleEdit));
+$("editFile").addEventListener("change", async e => { const f = e.target.files[0]; if (!f) return;
+  try { const im = await fileToImage(f); edit.src = toCanvas(im, 2000); edit.srcStats = labStats(edit.src); edit.mineFile = f; $("editTag").textContent = "내 사진" + (edit.ref ? " · 레퍼런스 색 맞춤" : ""); scheduleEdit(); }
+  catch (err) { $("saveStatus").textContent = err.message; } });
+$("editRef").addEventListener("change", async e => { const f = e.target.files[0]; if (!f) return;
+  try { const im = await fileToImage(f); setEditRef(toCanvas(im, 900), f); if (!coach.ref) { coach.refCanvas = edit.ref; coach.ref = analyze(edit.ref); coach.refFile = f; } }
+  catch (err) { $("saveStatus").textContent = err.message; } });
+$("resetBtn").onclick = () => { applyPreset("없음"); edit.p.match = 0; syncSliders(); scheduleEdit(); $("cmdStatus").textContent = "원본으로 돌렸어요."; };
+function refreshRatioChips(){ renderChips($("ratioChips"), Object.keys(RATIOS), edit.ratio, n => { edit.ratio = n; refreshRatioChips(); scheduleEdit(); }); }
+refreshRatioChips();
+function refreshTposChips(){ renderChips($("textPosChips"), TPOS, edit.tpos, n => { edit.tpos = n; refreshTposChips(); scheduleEdit(); }); }
+refreshTposChips();
+applyPreset("없음");
+
+// 짧은 한국어 명령 (토큰 없음)
+function runCommand(text){
+  const t = text.replace(/\s+/g, "");
+  if (!t) return "명령을 입력하세요.";
+  const amt = /많이|확|세게|훨씬/.test(t) ? 2 : /조금|살짝|약간/.test(t) ? 0.5 : 1;
+  const step = v => Math.round(v*amt);
+  const log = [];
+  const bump = (k, v, lim) => { edit.p[k] = Math.max(-(lim||50), Math.min(lim||50, edit.p[k] + step(v))); log.push(`${k}`); };
+  for (const name of Object.keys(PRESETS)) if (t.includes(name)) { applyPreset(name); return `프리셋 '${name}' 적용.`; }
+  if (/원본|초기화|리셋|되돌/.test(t)) { $("resetBtn").onclick(); return "원본으로."; }
+  if (/어둡/.test(t)) bump("bright", -12);
+  if (/밝게|밝아|환하/.test(t)) bump("bright", 12);
+  if (/대비(를)?(올|높|세)|쨍|선명/.test(t)) bump("contrast", 12);
+  if (/대비(를)?(내|낮|약)|부드럽|물렁/.test(t)) bump("contrast", -12);
+  if (/채도(를)?(올|높|진)|쨍한색|색진하/.test(t)) bump("sat", 12);
+  if (/채도(를)?(내|낮|연)|색연하|빛바랜|바랜|물빠진/.test(t)) bump("sat", -12);
+  if (/따뜻|노랗|누렇|주황/.test(t)) bump("warm", 12);
+  if (/차갑|시원|파랗|푸르/.test(t)) bump("warm", -12);
+  if (/청록|시네마|영화|틸/.test(t)) bump("teal", 12, 50);
+  if (/필름|빈티지|레트로/.test(t)) { bump("lift", 6, 30); bump("grain", 6, 30); bump("sat", -6); }
+  if (/그레인(빼|없|제거|지워)|노이즈(빼|없|제거)/.test(t)) { edit.p.grain = 0; log.push("grain"); }
+  else if (/그레인|노이즈|거칠/.test(t)) bump("grain", 6, 30);
+  if (/비네팅(빼|없|제거)|가장자리밝/.test(t)) { edit.p.vig = 0; log.push("vig"); }
+  else if (/비네팅|가장자리어둡|테두리어둡/.test(t)) bump("vig", 15, 60);
+  if (/레퍼런스(색)?(더|세게|강하게)|더비슷/.test(t)) bump("match", 20, 100);
+  if (/레퍼런스(색)?(덜|약하게|빼)/.test(t)) bump("match", -20, 100);
+  if (/자막|글자|제목/.test(t)) { if (/위/.test(t)) edit.tpos = /왼/.test(t) ? "왼쪽 위" : "오른쪽 위"; else if (/아래|밑/.test(t)) edit.tpos = /왼/.test(t) ? "왼쪽 아래" : "오른쪽 아래"; else if (/가운데|중앙/.test(t)) edit.tpos = "가운데";
+    if (/왼/.test(t) && !/위|아래|밑/.test(t)) edit.tpos = edit.tpos.includes("아래") ? "왼쪽 아래" : "왼쪽 위"; if (/오른/.test(t) && !/위|아래|밑/.test(t)) edit.tpos = edit.tpos.includes("아래") ? "오른쪽 아래" : "오른쪽 위";
+    refreshTposChips(); log.push("자막 위치"); }
+  for (const [k, r] of Object.entries(RATIOS)) if (k !== "원본" && t.includes(k.replace(":", ""))) { edit.ratio = k; refreshRatioChips(); log.push("비율 " + k); }
+  if (/세로|릴스|스토리/.test(t)) { edit.ratio = "9:16"; refreshRatioChips(); log.push("비율 9:16"); }
+  if (/정사각/.test(t)) { edit.ratio = "1:1"; refreshRatioChips(); log.push("비율 1:1"); }
+  if (!log.length) return "이 말은 아직 몰라요. 밝게/어둡게/따뜻하게/차갑게/선명하게/부드럽게/채도/청록/필름/그레인/비네팅/자막 위치/비율, 프리셋 이름을 써 보세요. 더 복잡한 요청은 '클로드에 묻기'.";
+  syncSliders(); scheduleEdit(); return "적용: " + [...new Set(log)].join(", ");
+}
+$("cmdRun").onclick = () => { $("cmdStatus").textContent = runCommand($("cmdInput").value); };
+$("cmdInput").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("cmdRun").onclick(); } });
+
+// 저장
+let downloads = null;
+$("saveBtn").onclick = async () => {
+  const out = renderEdit(2000, true); if (!out) return;
+  $("saveStatus").textContent = "파일 만드는 중…";
+  const blob = await new Promise(r => out.toBlob(r, "image/jpeg", 0.92));
+  if (!downloads) {
+    if (!window.claude) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `찍기코치_${edit.preset}_${Date.now()}.jpg`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); $("saveStatus").textContent = "다운로드 폴더에 저장했어요."; return; }
+    $("saveStatus").textContent = "저장 기능이 이 화면에서는 꺼져 있어요. Claude 앱이나 브라우저에서 링크를 열면 저장할 수 있어요."; return; }
+  try { await downloads.save({ filename: `찍기코치_${edit.preset}_${Date.now()}.jpg`, data: blob }); $("saveStatus").textContent = "저장했어요."; }
+  catch (e) { $("saveStatus").textContent = e.code === "declined" ? "저장을 취소했어요." : "저장하지 못했어요 (" + (e.code || "오류") + ")."; }
+};
+
+/* ───────── 클로드에 묻기 ───────── */
+let sample = null, askCtl = null;
+async function blobOf(canvas){ return new Promise(r => toCanvas(canvas, 1024).toBlob(r, "image/jpeg", 0.85)); }
+$("askBtn").onclick = async () => {
+  if (!sample) {
+    if (!window.claude) { const q0 = $("askText").value.trim(); let txt = "사진·영상 촬영 코치로서 결론부터, 실행 지시 위주로 답해줘(갤럭시 기본 카메라 기준). " + q0;
+      if ($("askIncStats").checked && coach.analysis) { const a = coach.analysis; txt += `\n[내 사진 판정 수치] 대상:${coach.cat}, 평균밝기 ${(a.meanL*100).toFixed(0)}%, 채도 ${(a.meanS*100).toFixed(0)}%, 기울기 ${a.tilt.toFixed(1)}°, 선명도 ${a.sharp.toFixed(0)}, 색온도편차 ${a.cast.toFixed(2)}`; }
+      try { await navigator.clipboard.writeText(txt); $("askAnswer").textContent = "질문을 복사했어요. Claude 앱이 열리면 붙여넣고, 사진은 직접 첨부해 주세요."; } catch (e) { $("askAnswer").textContent = txt; }
+      window.open("https://claude.ai/new", "_blank"); return; }
+    $("askAnswer").textContent = "이 화면에서는 클로드 호출이 꺼져 있어요. Claude 앱이나 claude.ai에서 링크를 열어 주세요."; return; }
+  const q = $("askText").value.trim(); if (!q) { $("askAnswer").textContent = "질문을 적어 주세요."; return; }
+  askCtl = new AbortController(); $("askBtn").disabled = true; $("askStop").hidden = false; $("askAnswer").textContent = "생각 중…";
+  const images = [];
+  let ctxText = "";
+  if ($("askIncMine").checked && (edit.src || coach.canvas)) { images.push(await blobOf(edit.src || coach.canvas)); ctxText += "\n[첨부 1: 내가 찍은 사진]"; }
+  if ($("askIncRef").checked && (coach.refCanvas || edit.ref)) { images.push(await blobOf(coach.refCanvas || edit.ref)); ctxText += `\n[첨부 ${images.length}: 따라하고 싶은 레퍼런스]`; }
+  if ($("askIncStats").checked && coach.analysis) { const a = coach.analysis; ctxText += `\n[내 사진 판정 수치] 대상:${coach.cat}, 평균밝기 ${(a.meanL*100).toFixed(0)}%, 채도 ${(a.meanS*100).toFixed(0)}%, 기울기 ${a.tilt.toFixed(1)}°, 선명도 ${a.sharp.toFixed(0)}, 색온도편차 ${a.cast.toFixed(2)}, 주인공위치 x${a.subject.x.toFixed(2)} y${a.subject.y.toFixed(2)}`; }
+  const prompt = `당신은 사진·영상 촬영 코치입니다. 한국어로, 결론부터, 실행 가능한 지시 위주로 답하세요(촬영: 위치·거리·줌·노출·시간대 / 편집: 밝기·대비·채도·따뜻함·그림자 청록·그레인·비네팅 수치 제안, 0~±50 범위). 갤럭시 기본 카메라 기준.${ctxText}\n\n질문: ${q}`;
+  try {
+    const opts = { signal: askCtl.signal, cache: false, onText: ({ text }) => { $("askAnswer").textContent = text; } };
+    if (images.length) { const lim = await sample.limits().catch(() => ({})); if (lim.images) opts.images = images.slice(0, lim.images.maxCount || 2); }
+    const { text } = await sample(prompt, opts); $("askAnswer").textContent = text;
+  } catch (e) { $("askAnswer").textContent = (e.text || "") + (e.code === "cancelled" ? "\n(중지함)" : e.code === "not_granted" ? "\n클로드 호출을 허용하지 않아 답을 받지 못했어요." : `\n오류: ${e.code || e.message}`); }
+  finally { $("askBtn").disabled = false; $("askStop").hidden = true; }
+};
+$("askStop").onclick = () => askCtl && askCtl.abort();
+
+
+/* ───────── 라이브 카메라 ───────── */
+const live = { stream: null, track: null, timer: null, cat: "일반", catLocked: false, ghost: null, ghostOn: false, lastFaces: null, tiltDev: null, busy: false, stable: 0 };
+function liveChips(){ renderChips($("liveCats"), Object.keys(CATS), live.cat, n => { live.cat = n; live.catLocked = true; liveChips(); }); }
+liveChips();
+async function startLive(){
+  if (live.stream) { stopLive(); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $("liveStatus").textContent = "이 화면에서는 카메라를 열 수 없어요. 파일 버전을 Chrome에서 열거나, 호스팅 주소로 열어야 합니다."; return; }
+  try {
+    live.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 1920 } }, audio: false });
+  } catch (e) { $("liveStatus").textContent = e.name === "NotAllowedError" ? "카메라 권한이 거부됐어요. Chrome 주소창 자물쇠 → 권한 → 카메라 허용 후 다시." : "카메라를 열 수 없어요 (" + e.name + "). 이 주소에서는 카메라가 막혀 있을 수 있어요."; return; }
+  const v = $("liveVideo"); v.srcObject = live.stream; await v.play().catch(() => {});
+  live.track = live.stream.getVideoTracks()[0];
+  $("liveStart").textContent = "끄기"; $("liveShot").hidden = false; $("liveStatus").textContent = "안내를 보면서 맞춘 뒤 촬영하세요.";
+  try { const caps = live.track.getCapabilities ? live.track.getCapabilities() : {};
+    if (caps.zoom) { const z = $("liveZoom"); z.min = caps.zoom.min; z.max = Math.min(caps.zoom.max, 5); z.step = caps.zoom.step || 0.1; z.value = live.track.getSettings().zoom || caps.zoom.min; $("liveZoomV").textContent = (+z.value).toFixed(1) + "x"; $("liveZoomWrap").hidden = false; }
+  } catch (e) {}
+  if (window.DeviceOrientationEvent) window.addEventListener("deviceorientation", onOrient);
+  $("liveMsgs").innerHTML = '<div class="msg">분석 중…</div>';
+  live.timer = setInterval(liveTick, 300); setTimeout(liveTick, 50);
+}
+function stopLive(){
+  clearInterval(live.timer); live.timer = null;
+  if (live.stream) live.stream.getTracks().forEach(t => t.stop()); live.stream = null; live.track = null;
+  $("liveVideo").srcObject = null; $("liveStart").textContent = "카메라 켜기"; $("liveShot").hidden = true; $("liveZoomWrap").hidden = true;
+  window.removeEventListener("deviceorientation", onOrient);
+  const oc = $("liveOverlay"); oc.getContext("2d").clearRect(0, 0, oc.width, oc.height);
+  $("liveMsgs").innerHTML = '<div class="msg">카메라를 켜면 여기에 안내가 뜹니다.</div>';
+}
+function onOrient(e){ // 세로로 들었을 때 좌우 기울기 = gamma, 카메라 상하 = beta
+  if (e.gamma == null) return; let g = e.gamma; // 세로 모드 기준 좌우 롤
+  if (window.screen && screen.orientation && screen.orientation.type.startsWith("landscape")) g = e.beta;
+  live.tiltDev = g; $("liveLevel").style.transform = `translate(-50%,-50%) rotate(${-g}deg)`; $("liveLevel").classList.toggle("ok", Math.abs(g) < 1.5);
+}
+$("liveZoom").addEventListener("input", async e => { const z = +e.target.value; $("liveZoomV").textContent = z.toFixed(1) + "x"; try { await live.track.applyConstraints({ advanced: [{ zoom: z }] }); } catch (err) {} });
+async function liveTick(){
+  if (!live.stream || live.busy) return; live.busy = true;
+  try {
+    const v = $("liveVideo"); if (!v.videoWidth) return;
+    const c = document.createElement("canvas"); const sc = 240 / v.videoWidth; c.width = 240; c.height = Math.round(v.videoHeight * sc);
+    c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+    const a = analyze(c);
+    let faces = null; if (live.faceOk !== false && "FaceDetector" in window) { faces = await detectFaces(c); if (faces === null) { live.faceFail = (live.faceFail || 0) + 1; if (live.faceFail >= 3) live.faceOk = false; } else live.faceFail = 0; }
+    if (!live.catLocked) { const g = guessCategory(a, faces); if (g !== live.cat) { live.cat = g; liveChips(); } }
+    const tilt = live.tiltDev != null ? live.tiltDev : a.tilt;
+    const msgs = liveAdvice(a, faces, live.cat, tilt);
+    $("liveMsgs").innerHTML = msgs.map(m => `<div class="msg ${m.s}">${m.t}</div>`).join("");
+    $("liveMeterPin").style.top = `${Math.round((1 - Math.min(1, Math.max(0, a.meanL))) * 100)}%`;
+    // 오버레이: 3분할 + 얼굴/주인공 + 목표 위치
+    const oc = $("liveOverlay"); const box = $("liveBox").getBoundingClientRect(); oc.width = Math.round(box.width); oc.height = Math.round(box.height);
+    const ctx = oc.getContext("2d"), W = oc.width, H = oc.height; ctx.clearRect(0, 0, W, H);
+    // object-fit: cover 보정 — 영상 비율과 박스 비율 차이
+    const vr = v.videoWidth / v.videoHeight, br = W / H; let sx = 1, sy = 1, ox = 0, oy = 0;
+    if (vr > br) { sx = (H * vr) / W; ox = (W - H * vr) / 2; } else { sy = (W / vr) / H; oy = (H - W / vr) / 2; }
+    const mapX = x => ox + x * W * sx, mapY = y => oy + y * H * sy;
+    ctx.strokeStyle = "rgba(255,255,255,.4)"; ctx.lineWidth = 1;
+    [1/3, 2/3].forEach(t => { ctx.beginPath(); ctx.moveTo(W*t, 0); ctx.lineTo(W*t, H); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0, H*t); ctx.lineTo(W, H*t); ctx.stroke(); });
+    if (faces && faces.length) { ctx.strokeStyle = "#f2a33a"; ctx.lineWidth = 2; faces.forEach(f => ctx.strokeRect(mapX(f.x), mapY(f.y), f.w*W*sx, f.h*H*sy)); }
+    else { ctx.fillStyle = "rgba(242,163,58,.85)"; ctx.beginPath(); ctx.arc(mapX(a.subject.x), mapY(a.subject.y), 7, 0, Math.PI*2); ctx.fill(); }
+    if (live.ghostOn && live.ghost) { ctx.globalAlpha = 0.35; ctx.drawImage(live.ghost, ox, oy, W*sx, H*sy); ctx.globalAlpha = 1; }
+    live.lastFaces = faces;
+    $("liveDebug").textContent = `밝기 ${Math.round(a.meanL*100)}% · 기울기 ${tilt.toFixed(1)}° · 얼굴 ${faces === null ? "인식 불가(주인공 점으로 대체)" : faces.length + "개"} · 대상 ${live.cat}`;
+  } catch (e) {
+    $("liveMsgs").innerHTML = `<div class="msg bad">분석 오류: ${String(e && e.message || e).slice(0, 80)}</div>`;
+  } finally { live.busy = false; }
+}
+function liveAdvice(a, faces, cat, tilt){
+  const m = []; const push = (t, s) => m.push({ t, s });
+  const f = faces && faces.length ? faces.reduce((p, x) => x.h > p.h ? x : p) : null;
+  // 1순위: 거리/위치
+  if (f) {
+    if (f.h > 0.32) push("두 걸음 뒤로 (또는 줌 2x)", "warn");
+    else if (f.h < 0.07) push("세 걸음 가까이 (또는 줌 2x)", "warn");
+    const fx = f.x + f.w/2;
+    if (f.y < 0.03) push("카메라 조금 위로 — 머리 위 여백", "bad");
+    else if (f.y > 0.42) push("카메라 조금 아래로", "warn");
+    if (cat === "인물" && fx > 0.38 && fx < 0.62) push("인물을 왼쪽이나 오른쪽 1/3선으로 — 카메라를 옆으로 살짝", "warn");
+  } else if (cat === "풍경" && a.horizon != null && a.horizon > 0.4 && a.horizon < 0.6) push("수평선이 한가운데 — 카메라를 올리거나 내려 1/3로", "warn");
+  else if ((cat === "음식" || cat === "제품·소품") && third(a.subject.x) !== 1) push(`주인공을 가운데로 — 카메라를 ${a.subject.x < 0.5 ? "왼쪽" : "오른쪽"}으로`, "warn");
+  // 2순위: 수평
+  if (cat !== "음식" && cat !== "제품·소품" && Math.abs(tilt) >= 1.5) push(`${tilt > 0 ? "왼쪽" : "오른쪽"}으로 ${Math.abs(tilt).toFixed(0)}° 돌려 수평`, Math.abs(tilt) >= 3 ? "bad" : "warn");
+  // 3순위: 노출
+  if (a.bright > 0.08 || a.meanL > 0.72) push("너무 밝음 — 화면 터치 후 해 아이콘 아래로 (−0.7)", "warn");
+  else if (a.meanL < 0.18 && !(cat === "야경" || cat === "거리·건물")) push("어두움 — 밝은 쪽을 터치하거나 조명 쪽으로", "warn");
+  else if ((cat === "야경" || cat === "거리·건물") && a.meanL > 0.45) push("밤 장면치고 밝음 — 노출 −0.7로 조명 살리기", "warn");
+  // 4순위: 색
+  if (a.cast > 0.15) push("노란 조명 — 찍고 편집에서 '차갑게'", "warn");
+  if (!m.length) { live.stable++; push(live.stable > 3 ? "좋아요 — 지금 찍으세요" : "거의 맞았어요, 잠깐 멈추세요", "ok"); } else live.stable = 0;
+  return m.slice(0, 3);
+}
+$("liveStart").onclick = startLive;
+$("liveShot").onclick = async () => {
+  const v = $("liveVideo"); if (!v.videoWidth) return;
+  const c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext("2d").drawImage(v, 0, 0);
+  const fl = $("liveFlash"); fl.style.opacity = .8; setTimeout(() => fl.style.opacity = 0, 120);
+  coach.canvas = toCanvas(c, 1400); coach.catLocked = true; coach.cat = live.cat; $("coachTag").textContent = "앱에서 촬영";
+  edit.src = toCanvas(c, 2000); edit.srcStats = labStats(edit.src); edit.mineFile = null; $("editTag").textContent = "앱에서 촬영";
+  const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.92));
+  if (downloads) { try { await downloads.save({ filename: `찍기코치_촬영_${Date.now()}.jpg`, data: blob }); } catch (e) {} }
+  else if (!window.claude) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `찍기코치_촬영_${Date.now()}.jpg`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
+  await runCoach(); showTab("coach");
+};
+$("liveRef").addEventListener("change", async e => { const f = e.target.files[0]; if (!f) return;
+  try { const im = await fileToImage(f); live.ghost = toCanvas(im, 800); live.ghostOn = true; $("liveGhost").hidden = false; $("liveGhost").textContent = "겹침 끄기";
+    coach.refCanvas = toCanvas(im, 900); coach.ref = analyze(coach.refCanvas); coach.refFile = f; if (!edit.ref) setEditRef(coach.refCanvas, f);
+    $("liveStatus").textContent = "레퍼런스를 반투명으로 겹쳤어요. 피사체 위치를 겹쳐 맞추세요."; }
+  catch (err) { $("liveStatus").textContent = err.message; } });
+$("liveGhost").onclick = () => { live.ghostOn = !live.ghostOn; $("liveGhost").textContent = live.ghostOn ? "겹침 끄기" : "겹침 켜기"; };
+$("liveNative").addEventListener("change", async e => { const f = e.target.files[0]; if (!f) return;
+  try { const im = await fileToImage(f); coach.canvas = toCanvas(im, 1400); coach.mineFile = f; coach.catLocked = true; coach.cat = live.cat; $("coachTag").textContent = "내 사진";
+    edit.src = toCanvas(im, 2000); edit.srcStats = labStats(edit.src); edit.mineFile = f; $("editTag").textContent = "내 사진"; await runCoach(); showTab("coach"); }
+  catch (err) { $("liveStatus").textContent = err.message; } });
+document.addEventListener("visibilitychange", () => { if (document.hidden && live.stream) stopLive(); });
+
+/* ───────── 탭 ───────── */
+const TABS = ["live", "coach", "edit", "ask"];
+function showTab(name){ TABS.forEach(t => { $("tab-"+t).hidden = t !== name; $("tabbtn-"+t).setAttribute("aria-selected", String(t === name)); });
+  try { localStorage.setItem("tab", name); } catch (e) {} if (name === "edit") scheduleEdit(); if (name !== "live" && live.stream) stopLive(); }
+TABS.forEach(t => $("tabbtn-"+t).onclick = () => showTab(t));
+let initTab = "live"; try { initTab = localStorage.getItem("tab") || "live"; } catch (e) {}
+if (["#edit","#ask","#coach","#live"].includes(location.hash)) initTab = location.hash.slice(1);
+
+/* ───────── 시작 ───────── */
+(async () => {
+  const demo = await loadDemo(); coach.canvas = toCanvas(demo, 1000); edit.src = toCanvas(demo, 1400); edit.srcStats = labStats(edit.src);
+  await runCoach(); showTab(initTab);
+  if (window.claude && claude.use) {
+    claude.use("downloads").then(d => { downloads = d; if (!d) $("saveStatus").textContent = ""; });
+    claude.use("sample").then(s => { sample = s; if (!s) $("askAnswer").textContent = "이 화면에서는 클로드 호출을 쓸 수 없어요. Claude 앱에서 열면 됩니다."; });
+  }
+})();
+})();
+</script>
+</body></html>
